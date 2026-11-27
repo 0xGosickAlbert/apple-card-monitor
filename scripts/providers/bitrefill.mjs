@@ -22,12 +22,19 @@ export async function collectBitrefillApi(rates = {}) {
   };
 
   try {
-    const searchRes = await fetchJson(
-      `${API_BASE}/products?q=apple&include_test_products=false&limit=100`,
-      { headers },
-      { timeoutMs: 15000 }
-    );
-    const items = (searchRes?.data || []).filter((item) => isAppleBrandName(item.name || item.base_name));
+    const itemMap = new Map();
+    for (const q of ["apple", "itunes", "app store"]) {
+      const searchRes = await fetchJson(
+        `${API_BASE}/products?q=${encodeURIComponent(q)}&include_test_products=false&limit=100`,
+        { headers },
+        { timeoutMs: 15000 }
+      );
+      for (const item of searchRes?.data || []) {
+        if (!isAppleBrandName(item.name || item.base_name)) continue;
+        if (!itemMap.has(item.id)) itemMap.set(item.id, item);
+      }
+    }
+    const items = [...itemMap.values()];
     if (items.length === 0) {
       return { offers: [], sourceStatus: "restricted_or_empty" };
     }

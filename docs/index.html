@@ -474,7 +474,7 @@
   </main>
 
   <script>
-    const POPULAR_ORDER = ["US", "JP", "HK", "TW", "TR", "GB", "AU", "CA", "DE", "SG", "NG", "IN", "AE", "SA", "FR", "KR"];
+    const POPULAR_ORDER = ["US", "JP", "HK", "TW", "TR", "GB", "AU", "CA", "DE", "SG", "NG", "IN", "AE", "SA", "FR"];
     let appData = null;
     let displayCur = localStorage.getItem("apple_disp_cur") || "USD";
     let selectedCountry = localStorage.getItem("apple_country") || "US";
@@ -611,11 +611,32 @@
 
       const sortedVals = [...mergedVals].sort((a, b) => a - b);
       if (!selectedFaceValue || !sortedVals.includes(selectedFaceValue)) {
-        // 优先默认选常见中位档，如 50 / 100 / 1000 / 首个值
-        selectedFaceValue =
-          sortedVals.find((v) => v === 50 || v === 100 || v === 1000) ??
-          sortedVals[Math.min(2, sortedVals.length - 1)] ??
-          10;
+        const preferredOrder = [100, 50, 1000, 3000, 10000, 25, 200, 500, 5000, 2000, 15, 20, 10];
+        const candidates = fixedVals.length ? fixedVals : sortedVals;
+        const scoreVal = (v) => {
+          const inStockSites = new Set();
+          const allSites = new Set();
+          for (const o of curOffers) {
+            const match =
+              o.type === "fixed"
+                ? Math.abs(o.faceValue - v) < 1e-6
+                : v >= o.minFaceValue && v <= o.maxFaceValue;
+            if (match) {
+              allSites.add(o.siteId);
+              if (o.inStock) inStockSites.add(o.siteId);
+            }
+          }
+          const prefIdx = preferredOrder.indexOf(v);
+          const prefScore = prefIdx !== -1 ? (preferredOrder.length - prefIdx) : 0;
+          return { v, inStockCount: inStockSites.size, allCount: allSites.size, prefScore };
+        };
+        const ranked = candidates.map(scoreVal).sort((a, b) =>
+          b.inStockCount - a.inStockCount ||
+          b.allCount - a.allCount ||
+          b.prefScore - a.prefScore ||
+          a.v - b.v
+        );
+        selectedFaceValue = ranked[0]?.v ?? sortedVals[0] ?? 10;
       }
 
       document.getElementById("denomHint").textContent = `面值币种: ${selectedCurrency}`;

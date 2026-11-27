@@ -324,8 +324,10 @@ export function normalizeCountry(raw, fallbackText = "") {
 export function isAppleBrandName(name) {
   if (!name) return false;
   const s = String(name).trim();
-  // 匹配 Apple / iTunes / App Store，同时排除非礼品卡或无关词
-  return /\b(apple|itunes|app\s*store)\b/i.test(s) && !/\b(pineapple|snapple|macbook\s*repair)\b/i.test(s);
+  const excluded =
+    /\b(applebee|applebees|apple\s*&\s*eve|pineapple|snapple|big\s*apple|red\s*apple|green\s*apple|bad\s*apple|macbook\s*repair|airpods|iphone|ipad|macbook|imac|apple\s*watch|watch\s*(se|series|ultra)|pencil|airtag|homepod|vision\s*pro|magsafe|earpods|magic\s*(mouse|keyboard|trackpad)|studio\s*display|mac\s*(mini|studio|pro)|beats|charger|adapter|cable|aluminium|aluminum|sport\s*band|gps|40mm|42mm|44mm|46mm|128gb|256gb|512gb|1tb|usb-c)\b|애플펜슬|主動消噪|클라우드/i;
+  if (excluded.test(s)) return false;
+  return /\b(apple|itunes|app\s*store|appstore)\b|苹果/i.test(s);
 }
 
 export function roundNum(n, digits = 4) {

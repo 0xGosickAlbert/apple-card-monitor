@@ -1,4 +1,4 @@
-import { fetchText, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
+import { fetchText, isAppleBrandName, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
 
 const SITE_ID = "bytetopup";
 const SITE_NAME = "ByteTopup";
@@ -52,17 +52,19 @@ export async function collectByteTopup(rates = {}) {
   const now = new Date().toISOString();
   const productMap = new Map();
 
-  for (const q of ["Apple", "iTunes"]) {
+  for (const q of ["Apple", "iTunes", "App Store"]) {
     try {
       const searchHtml = await fetchText(`${BASE_URL}/products?q=${encodeURIComponent(q)}`, {}, { timeoutMs: 15000 });
       const unescaped = searchHtml.replace(/\\"/g, '"');
-      const matches = [...unescaped.matchAll(/"id":"(\d+)","name":"([^"]*(?:Apple|iTunes)[^"]*)"[^}]*?"region":"([A-Z]{2})"/gi)];
+      const matches = [...unescaped.matchAll(/"id":"(\d+)","name":"([^"]*(?:Apple|iTunes|App\s*Store)[^"]*)"[^}]*?"region":"([A-Z]{2})"/gi)];
       for (const m of matches) {
+        if (!isAppleBrandName(m[2])) continue;
         productMap.set(m[1], { id: m[1], name: m[2], region: m[3] });
       }
       // 兜底匹配未紧邻 region 的产品 id
-      const idMatches = [...unescaped.matchAll(/"id":"(\d+)","name":"([^"]*(?:Apple|iTunes)[^"]*)"/gi)];
+      const idMatches = [...unescaped.matchAll(/"id":"(\d+)","name":"([^"]*(?:Apple|iTunes|App\s*Store)[^"]*)"/gi)];
       for (const m of idMatches) {
+        if (!isAppleBrandName(m[2])) continue;
         if (!productMap.has(m[1])) {
           productMap.set(m[1], { id: m[1], name: m[2], region: null });
         }

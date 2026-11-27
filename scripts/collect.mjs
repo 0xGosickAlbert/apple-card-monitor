@@ -11,6 +11,8 @@ import { collectCoinGate } from "./providers/coingate.mjs";
 import { collectByteTopup } from "./providers/bytetopup.mjs";
 import { collectBitrefillApi } from "./providers/bitrefill.mjs";
 
+const EXCLUDED_COUNTRIES = new Set(["KR", "MY"]);
+
 const ALL_SITES = [
   { id: "tamana", name: "Tamana", mode: "api" },
   { id: "cryptorefills", name: "CryptoRefills", mode: "api" },
@@ -111,6 +113,7 @@ export async function runCollect() {
       }
     }
 
+    offers = offers.filter((o) => !EXCLUDED_COUNTRIES.has(o.country));
     mergedOffers.push(...offers);
     const countriesCount = new Set(offers.map((o) => o.country)).size;
     siteStats[r.id] = {
@@ -126,9 +129,10 @@ export async function runCollect() {
 
   // 合并 Kryptomate 浏览器缓存数据
   const kmCache = browserCache?.sites?.kryptomate;
-  const kmOffers = kmCache?.offers?.length
+  const kmOffers = (kmCache?.offers?.length
     ? kmCache.offers
-    : (prevLatest?.offers || []).filter((o) => o.siteId === "kryptomate");
+    : (prevLatest?.offers || []).filter((o) => o.siteId === "kryptomate")
+  ).filter((o) => !EXCLUDED_COUNTRIES.has(o.country));
   mergedOffers.push(...kmOffers);
   siteStats.kryptomate = {
     name: "Kryptomate",
@@ -143,6 +147,7 @@ export async function runCollect() {
   // 过滤无效报价并计算真实汇率比例 & 历史价格浮动
   const finalOffers = [];
   for (const o of mergedOffers) {
+    if (EXCLUDED_COUNTRIES.has(o.country)) continue;
     const rate = o.currency === "USD" || o.currency === "USDT" ? 1 : rates[o.currency];
     if (!(rate > 0)) continue;
 

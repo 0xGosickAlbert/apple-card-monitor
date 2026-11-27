@@ -19,65 +19,82 @@ export async function collectCoinGate(rates = {}) {
   } catch (err) {
     console.warn(`[CoinGate] 商家 USDT 汇率拉取失败，回退国际汇率: ${err.message}`);
   }
-  const baseData = await fetchJson(`${API_BASE}/gift-cards/brand_group_v2/apple?country=US`, {}, { timeoutMs: 15000 });
-  const countries = (baseData?.countries || []).map((c) => String(c.value || "").toUpperCase()).filter(Boolean);
-  if (!countries.length) countries.push("US");
-
   const batchItems = [];
+  const seenBatchKeys = new Set();
   const metaMap = new Map(); // key: `${gift_card_id}|${country}|${denomVal}`
 
-  await mapLimit(
-    countries,
-    5,
-    async (cc) => {
-      try {
-        const data = cc === "US"
-          ? baseData
-          : await fetchJson(`${API_BASE}/gift-cards/brand_group_v2/apple?country=${cc}`, {}, { timeoutMs: 15000 });
+  for (const slug of ["apple", "itunes"]) {
+    let baseData;
+    try {
+      baseData = await fetchJson(`${API_BASE}/gift-cards/brand_group_v2/${slug}?country=US`, {}, { timeoutMs: 15000 });
+    } catch (err) {
+      console.warn(`[CoinGate] 品牌 ${slug} 目录拉取失败: ${err.message}`);
+      continue;
+    }
+    const countries = (baseData?.countries || [])
+      .map((c) => String(c.value || "").toUpperCase())
+      .filter((cc) => cc && cc !== "KR" && cc !== "MY");
+    if (!countries.length) countries.push("US");
 
-        for (const d of data?.denominations || []) {
-          if (!d?.gift_card_id) continue;
-          const currency = String(d.currency || "USD").toUpperCase();
-          if (d.type === "range") {
-            const minFV = Number(d.min_denomination);
-            const maxFV = Number(d.max_denomination);
-            const step = Number(d.custom_denomination_step) || 1;
-            if (!(minFV > 0) || !(maxFV >= minFV)) continue;
-            const probeVal = Math.max(minFV, Math.min(maxFV, Math.ceil(minFV)));
-            const key = `${d.gift_card_id}|${cc}|${probeVal}`;
-            batchItems.push({ gift_card_id: d.gift_card_id, country: cc, denomination: probeVal });
-            metaMap.set(key, {
-              type: "range",
-              country: normalizeCountry(cc),
-              rawCountry: cc,
-              currency,
-              minFV,
-              maxFV,
-              step,
-              probeVal,
-              outOfStock: Boolean(d.out_of_stock),
-            });
-          } else {
-            const fv = Number(d.denomination);
-            if (!(fv > 0)) continue;
-            const key = `${d.gift_card_id}|${cc}|${fv}`;
-            batchItems.push({ gift_card_id: d.gift_card_id, country: cc, denomination: fv });
-            metaMap.set(key, {
-              type: "fixed",
-              country: normalizeCountry(cc),
-              rawCountry: cc,
-              currency,
-              fv,
-              outOfStock: Boolean(d.out_of_stock),
-            });
+    await mapLimit(
+      countries,
+      5,
+      async (cc) => {
+        try {
+          const data = cc === "US"
+            ? baseData
+            : await fetchJson(`${API_BASE}/gift-cards/brand_group_v2/${slug}?country=${cc}`, {}, { timeoutMs: 15000 });
+
+          for (const d of data?.denominations || []) {
+            if (!d?.gift_card_id) continue;
+            const currency = String(d.currency || "USD").toUpperCase();
+            if (d.type === "range") {
+              const minFV = Number(d.min_denomination);
+              const maxFV = Number(d.max_denomination);
+              const step = Number(d.custom_denomination_step) || 1;
+              if (!(minFV > 0) || !(maxFV >= minFV)) continue;
+              const probeVal = Math.max(minFV, Math.min(maxFV, Math.ceil(minFV)));
+              const key = `${d.gift_card_id}|${cc}|${probeVal}`;
+              if (seenBatchKeys.has(key)) continue;
+              seenBatchKeys.add(key);
+              batchItems.push({ gift_card_id: d.gift_card_id, country: cc, denomination: probeVal });
+              metaMap.set(key, {
+                slug,
+                type: "range",
+                country: normalizeCountry(cc),
+                rawCountry: cc,
+                currency,
+                minFV,
+                maxFV,
+                step,
+                probeVal,
+                outOfStock: Boolean(d.out_of_stock),
+              });
+            } else {
+              const fv = Number(d.denomination);
+              if (!(fv > 0)) continue;
+              const key = `${d.gift_card_id}|${cc}|${fv}`;
+              if (seenBatchKeys.has(key)) continue;
+              seenBatchKeys.add(key);
+              batchItems.push({ gift_card_id: d.gift_card_id, country: cc, denomination: fv });
+              metaMap.set(key, {
+                slug,
+                type: "fixed",
+                country: normalizeCountry(cc),
+                rawCountry: cc,
+                currency,
+                fv,
+                outOfStock: Boolean(d.out_of_stock),
+              });
+            }
           }
+        } catch (err) {
+          console.warn(`[CoinGate] ${slug}/${cc} 目录拉取失败: ${err.message}`);
         }
-      } catch (err) {
-        console.warn(`[CoinGate] 国家 ${cc} 目录拉取失败: ${err.message}`);
-      }
-    },
-    80
-  );
+      },
+      80
+    );
+  }
 
   // 分批调用 details_v2 获取精确售价（官方限制 max_cart_items = 50）
   const chunks = [];
@@ -85,7 +102,7 @@ export async function collectCoinGate(rates = {}) {
     chunks.push(batchItems.slice(i, i + 40));
   }
 
-  const offers = [];
+  const rawOffers = [];
   await mapLimit(
     chunks,
     3,
@@ -128,10 +145,10 @@ export async function collectCoinGate(rates = {}) {
               ? Math.max(0, Math.floor(Number(rawStock)))
               : null;
           const inStock = !(gc.out_of_stock ?? meta.outOfStock) && (stockCount === null || stockCount > 0);
-          const url = `https://coingate.com/gift-cards/apple?country=${meta.rawCountry}`;
+          const url = `https://coingate.com/gift-cards/${meta.slug}?country=${meta.rawCountry}`;
 
           if (meta.type === "range") {
-            offers.push({
+            rawOffers.push({
               siteId: SITE_ID,
               siteName: SITE_NAME,
               country: meta.country,
@@ -149,7 +166,7 @@ export async function collectCoinGate(rates = {}) {
               updatedAt: now,
             });
           } else {
-            offers.push({
+            rawOffers.push({
               siteId: SITE_ID,
               siteName: SITE_NAME,
               country: meta.country,
@@ -175,5 +192,21 @@ export async function collectCoinGate(rates = {}) {
     120
   );
 
-  return offers;
+  // 同国家同规格去重，优先保留有货且更便宜的报价
+  const deduped = new Map();
+  for (const o of rawOffers) {
+    const key = `${o.country}|${o.currency}|${o.type}|${o.type === "range" ? `${o.minFaceValue}-${o.maxFaceValue}` : o.faceValue}`;
+    const prev = deduped.get(key);
+    if (!prev) {
+      deduped.set(key, o);
+      continue;
+    }
+    const oPrice = o.type === "range" ? o.unitPayUsd : o.payUsd;
+    const pPrice = prev.type === "range" ? prev.unitPayUsd : prev.payUsd;
+    if ((o.inStock && !prev.inStock) || (o.inStock === prev.inStock && oPrice < pPrice)) {
+      deduped.set(key, o);
+    }
+  }
+
+  return [...deduped.values()];
 }

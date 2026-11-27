@@ -36,6 +36,7 @@ function parseKryptomateOffers(giftCards, now) {
     if (!isAppleBrandName(gc.name)) continue;
     const isActive = String(gc.status || "ACTIVE").toUpperCase() === "ACTIVE";
     const country = normalizeCountry(gc.countryCode || gc.countries?.[0], gc.name);
+    if (country === "KR" || country === "MY") continue;
     const url = gc.slug
       ? `https://kryptomate.com/zh/gift-cards/${gc.slug}`
       : "https://kryptomate.com/zh/gift-cards?query=Apple";
@@ -96,8 +97,9 @@ function parseKryptomateOffers(giftCards, now) {
 function parseBitrefillOffers(products, now) {
   const offers = [];
   for (const det of products || []) {
-    if (!det || (!isAppleBrandName(det.baseName) && !isAppleBrandName(det.name))) continue;
+    if (!det || !isAppleBrandName(det.name || det.baseName)) continue;
     const country = normalizeCountry(det.countryCode || det.countries?.[0], det.name);
+    if (country === "KR" || country === "MY") continue;
     const currency = String(det.currency || "USD").toUpperCase();
     const inStock = !det.outOfStock;
     const url = `https://www.bitrefill.com/${country.toLowerCase()}/en/gift-cards/${det.slug}/`;
@@ -175,62 +177,94 @@ const task = await taskSpace("apple-monitor-sync");
 const page = task.page("p1");
 const out = { handoff: null, kmCards: [], brProducts: [], errors: [] };
 
-async function isCfChallenge() {
-  const title = await page.title().catch(() => "");
-  const snap = await page.snapshot().catch(() => "");
+async function isCfChallenge(targetPage = page) {
+  const title = await targetPage.title().catch(() => "");
+  const snap = await targetPage.snapshot().catch(() => "");
   return /just a moment|请稍候|attention required|security check/i.test(title) ||
     /verify you are human|确认您是真人|turnstile/i.test(snap);
 }
 
 // 1. 采集 Kryptomate
 try {
-  await page.goto("https://kryptomate.com/zh/gift-cards?query=Apple", { timeout: 30000 }).catch(() => {});
+  await page.goto("https://kryptomate.com/zh/gift-cards?query=Apple", { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
   await page.waitForTimeout(2500);
-  if (await isCfChallenge()) {
+  if (await isCfChallenge(page)) {
     await task.handOff();
     out.handoff = { site: "Kryptomate", spaceId: task.spaceId };
     await fs.writeFile(TMP_FILE, JSON.stringify(out), "utf8");
     console.log("HANDOFF_KRYPTOMATE");
     process.exit(0);
   }
-  const kmRes = await page.fetch("https://cryptomate.store/api/v2/home_search?key=Apple", { timeout: 15000 });
-  if (kmRes.ok) {
-    const kmJson = JSON.parse(kmRes.body);
-    out.kmCards = kmJson?.data?.gift_cards || [];
-  } else {
-    out.errors.push("KM status " + kmRes.status);
+  const kmMap = new Map();
+  for (const kw of ["Apple", "iTunes", "App Store"]) {
+    const kmRes = await page.fetch("https://cryptomate.store/api/v2/home_search?key=" + encodeURIComponent(kw), { timeout: 15000 });
+    if (kmRes.ok) {
+      const kmJson = JSON.parse(kmRes.body);
+      for (const gc of kmJson?.data?.gift_cards || []) {
+        const key = gc._id || gc.slug || gc.name;
+        if (key && !kmMap.has(key)) kmMap.set(key, gc);
+      }
+    } else {
+      out.errors.push("KM(" + kw + ") status " + kmRes.status);
+    }
   }
+  out.kmCards = [...kmMap.values()];
 } catch (e) {
   out.errors.push("KM: " + e.message);
 }
 
-// 2. 采集 Bitrefill
+// 2. 采集 Bitrefill（使用独立新页避免上一页未完成状态造成 null origin CORS）
 try {
-  await page.goto("https://www.bitrefill.com/us/en/", { timeout: 30000 }).catch(() => {});
-  await page.waitForTimeout(2000);
-  if (await isCfChallenge()) {
+  const brPage = await task.newPage();
+  await brPage.goto("https://www.bitrefill.com/us/en/", { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
+  let brUrl = await brPage.url().catch(() => "");
+  if (!/bitrefill\.com/i.test(brUrl)) {
+    await brPage.goto("https://www.bitrefill.com/us/en/gift-cards/apple-usa/", { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
+    brUrl = await brPage.url().catch(() => "");
+  }
+  await brPage.waitForTimeout(2000);
+  if (!/bitrefill\.com/i.test(brUrl)) {
+    out.errors.push("BR 导航未到达 bitrefill.com (当前: " + brUrl + ")");
+  } else if (await isCfChallenge(brPage)) {
     await task.handOff();
     out.handoff = { site: "Bitrefill", spaceId: task.spaceId };
     await fs.writeFile(TMP_FILE, JSON.stringify(out), "utf8");
     console.log("HANDOFF_BITREFILL");
     process.exit(0);
-  }
-  const omniRes = await page.fetch("https://www.bitrefill.com/api/omni?q=apple&limit=100", { timeout: 15000 });
-  if (omniRes.ok) {
-    const oj = JSON.parse(omniRes.body);
-    const slugs = (oj.products || [])
-      .filter((p) => {
-        const bn = String(p.baseName || "").toLowerCase();
-        const id = String(p._id || "").toLowerCase();
-        return bn === "apple" || bn.includes("itunes") || id.startsWith("apple-") || id.startsWith("itunes-");
-      })
-      .map((p) => p._id);
+  } else {
+    const slugSet = new Set();
+    for (const q of ["apple", "itunes", "app store"]) {
+      const omniRes = await brPage.fetch("https://www.bitrefill.com/api/omni?q=" + encodeURIComponent(q) + "&limit=100", { timeout: 15000 });
+      if (omniRes.ok) {
+        const oj = JSON.parse(omniRes.body);
+        for (const p of oj.products || []) {
+          const bn = String(p.baseName || "").toLowerCase();
+          const nm = String(p.name || "").toLowerCase();
+          const id = String(p._id || "").toLowerCase();
+          if (
+            bn === "apple" ||
+            bn.includes("itunes") ||
+            bn.includes("app store") ||
+            nm.includes("itunes") ||
+            nm.includes("app store") ||
+            id.startsWith("apple-") ||
+            id.startsWith("itunes-") ||
+            id.startsWith("app-store-")
+          ) {
+            slugSet.add(p._id);
+          }
+        }
+      } else {
+        out.errors.push("BR omni(" + q + ") status " + omniRes.status);
+      }
+    }
+    const slugs = [...slugSet];
     for (let i = 0; i < slugs.length; i += 5) {
       const batch = slugs.slice(i, i + 5);
       const dets = await Promise.all(
         batch.map(async (slug) => {
           try {
-            const r = await page.fetch("https://www.bitrefill.com/api/product/" + encodeURIComponent(slug) + "?paymentCurrency=USD", { timeout: 12000 });
+            const r = await brPage.fetch("https://www.bitrefill.com/api/product/" + encodeURIComponent(slug) + "?paymentCurrency=USD", { timeout: 12000 });
             return r.ok ? JSON.parse(r.body) : null;
           } catch {
             return null;
@@ -241,8 +275,6 @@ try {
         if (d) out.brProducts.push(d);
       }
     }
-  } else {
-    out.errors.push("BR omni status " + omniRes.status);
   }
 } catch (e) {
   out.errors.push("BR: " + e.message);
