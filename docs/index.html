@@ -96,6 +96,43 @@
       color: var(--text);
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .btn-action {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      padding: 6px 11px;
+      border-radius: 9px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .btn-action:hover:not(:disabled) {
+      border-color: #93c5fd;
+      background: #eff6ff;
+      color: var(--accent);
+    }
+    .btn-action.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn-action.primary:hover:not(:disabled) {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      color: #fff;
+    }
+    .btn-action:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
 
     /* 通用卡片 */
     .panel {
@@ -396,6 +433,10 @@
       }
       .brand h1 { font-size: 15.5px; }
     }
+    @media (max-width: 600px) {
+      .topbar-inner { flex-wrap: wrap; }
+      .topbar-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+    }
   </style>
 </head>
 <body>
@@ -405,9 +446,13 @@
         <h1>🍎 Apple 礼品卡实时比价</h1>
         <div class="meta" id="metaLine">正在加载最新全网行情...</div>
       </div>
-      <div class="seg" role="group" aria-label="结算币种">
-        <button id="btnUsd" class="active" onclick="setDisplayCur('USD')">USDT ($)</button>
-        <button id="btnCny" onclick="setDisplayCur('CNY')">人民币 (¥)</button>
+      <div class="topbar-actions">
+        <button id="btnRefresh" class="btn-action" onclick="refreshData(false)" title="立即拉取最新行情数据">🔄 刷新</button>
+        <button id="btnCollect" class="btn-action primary" onclick="triggerCloudCollect()" title="触发 GitHub Actions 立即重新采集全网最新价格">⚡ 云端重采</button>
+        <div class="seg" role="group" aria-label="结算币种">
+          <button id="btnUsd" class="active" onclick="setDisplayCur('USD')">USDT ($)</button>
+          <button id="btnCny" onclick="setDisplayCur('CNY')">人民币 (¥)</button>
+        </div>
       </div>
     </div>
   </header>
@@ -450,10 +495,10 @@
     <!-- 比价排行榜 -->
     <section class="offer-list" id="offerList"></section>
 
-    <!-- 13大平台状态总览 -->
+    <!-- 12大平台状态总览 -->
     <section class="panel" style="margin-top: 16px;">
       <div class="panel-header">
-        <span class="panel-title">3. 监控站点覆盖状态（共 13 家）</span>
+        <span class="panel-title">3. 监控站点覆盖状态（共 12 家）</span>
         <span class="panel-sub" id="totalStats">-</span>
       </div>
       <div class="status-grid" id="statusGrid"></div>
@@ -467,6 +512,18 @@
         <div style="display:flex; gap:8px; margin-top:8px;">
           <button class="btn-sm" onclick="importCustomOffers()">导入并比价</button>
           <button class="btn-sm" style="background:#6b7280;" onclick="clearImported()">清除本地导入</button>
+        </div>
+      </details>
+
+      <details style="margin-top: 10px;">
+        <summary>云端重采密钥管理（仅本地保存）</summary>
+        <p class="panel-sub" style="margin: 6px 0;">
+          点击顶部「⚡ 云端重采」会调用 GitHub Actions 立即执行全网抓价。需配置 <code>0xGosickAlbert/apple-card-monitor</code> 仓库 <strong>Actions: Read and write</strong> 权限的 Fine-grained Token，仅保存在当前浏览器 <code>localStorage</code>。
+        </p>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="btn-sm" onclick="setGithubToken()">设置 / 更换 GitHub Token</button>
+          <button class="btn-sm" style="background:#6b7280;" onclick="clearGithubToken()">清除本地 Token</button>
+          <span class="panel-sub" id="tokenStatusTip"></span>
         </div>
       </details>
     </section>
@@ -761,7 +818,7 @@
           const isFiat = o.paymentType === "fiat";
           const fiatBadge = isFiat ? `<span class="badge badge-fiat">法币支付</span>` : "";
           const feeBadge =
-            o.siteId === "kinguin" || o.siteId === "eneba"
+            o.siteId === "eneba"
               ? `<span class="badge badge-fee">不含结账服务费</span>`
               : o.siteId === "keys4coins"
                 ? `<span class="badge badge-fee">主流加密币</span>`
@@ -884,19 +941,226 @@
       renderSiteStatuses();
     }
 
+    const GH_OWNER = "0xGosickAlbert";
+    const GH_REPO = "apple-card-monitor";
+    const GH_WORKFLOW = "monitor.yml";
+    const GH_PAT_KEY = "apple_gh_pat";
+    const RAW_LATEST_URL = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/main/docs/data/latest.json`;
+
+    let isRefreshing = false;
+    let isCollecting = false;
+    let lastCheckedAt = 0;
+
+    function updateMetaLine(extraTip = "") {
+      if (!appData) return;
+      const cny = appData.rateInfo?.rates?.CNY;
+      const base = `更新于 ${fmtTime(appData.generatedAt)} · 1 USD ≈ ¥${cny ? cny.toFixed(3) : "-"} (${appData.rateInfo?.source || "实时汇率"})`;
+      document.getElementById("metaLine").textContent = extraTip ? `${base} · ${extraTip}` : base;
+    }
+
+    function updateTokenStatusTip() {
+      const el = document.getElementById("tokenStatusTip");
+      if (!el) return;
+      el.textContent = localStorage.getItem(GH_PAT_KEY) ? "当前状态：已保存本地 Token" : "当前状态：未配置";
+    }
+
+    function setGithubToken() {
+      const cur = localStorage.getItem(GH_PAT_KEY) || "";
+      const tip = "请输入拥有 Actions (Read and write) 权限的 GitHub Fine-grained Token（仅存本地浏览器）：";
+      const input = prompt(tip, cur);
+      if (input === null) return;
+      const token = input.trim();
+      if (!token) {
+        localStorage.removeItem(GH_PAT_KEY);
+      } else {
+        localStorage.setItem(GH_PAT_KEY, token);
+      }
+      updateTokenStatusTip();
+    }
+
+    function clearGithubToken() {
+      localStorage.removeItem(GH_PAT_KEY);
+      updateTokenStatusTip();
+      alert("已清除本地保存的 GitHub Token");
+    }
+
+    async function fetchLatestData() {
+      const ts = Date.now();
+      const urls = [`./data/latest.json?t=${ts}`, `${RAW_LATEST_URL}?t=${ts}`];
+      const settled = await Promise.allSettled(
+        urls.map(async (u) => {
+          const res = await fetch(u, { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (!data?.generatedAt || !Array.isArray(data?.offers)) {
+            throw new Error("数据结构不完整");
+          }
+          return data;
+        })
+      );
+
+      const candidates = settled
+        .filter((r) => r.status === "fulfilled" && r.value)
+        .map((r) => r.value);
+
+      if (!candidates.length) {
+        const firstErr = settled.find((r) => r.status === "rejected")?.reason;
+        throw firstErr || new Error("无法获取行情数据");
+      }
+
+      candidates.sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
+      return candidates[0];
+    }
+
+    async function refreshData(silent = false) {
+      if (isRefreshing) return false;
+      isRefreshing = true;
+      const btn = document.getElementById("btnRefresh");
+      if (!silent && btn) {
+        btn.disabled = true;
+        btn.textContent = "🔄 刷新中...";
+      }
+
+      try {
+        const nextData = await fetchLatestData();
+        lastCheckedAt = Date.now();
+        const isChanged = !appData || nextData.generatedAt !== appData.generatedAt;
+
+        if (!isChanged && silent) return false;
+
+        appData = nextData;
+        renderCountries();
+        renderDenoms();
+        renderOffers();
+        renderSiteStatuses();
+        updateMetaLine(silent ? "已自动更新" : (isChanged ? "已更新至最新" : "已是最新数据"));
+        setTimeout(() => updateMetaLine(), 3000);
+        return isChanged;
+      } catch (err) {
+        if (!silent) {
+          updateMetaLine(`刷新失败: ${err.message}`);
+        }
+        return false;
+      } finally {
+        isRefreshing = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "🔄 刷新";
+        }
+      }
+    }
+
+    async function pollWorkflowCompletion(token, startedAt) {
+      const btn = document.getElementById("btnCollect");
+      const runsUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${GH_WORKFLOW}/runs?per_page=3`;
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      };
+
+      const deadline = Date.now() + 6 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 8000));
+        try {
+          const res = await fetch(`${runsUrl}&t=${Date.now()}`, { headers, cache: "no-store" });
+          if (!res.ok) continue;
+          const json = await res.json();
+          const run = (json.workflow_runs || []).find(
+            (r) => new Date(r.created_at).getTime() >= startedAt - 20000
+          );
+          if (!run) continue;
+
+          if (run.status === "queued" || run.status === "waiting") {
+            if (btn) btn.textContent = "⏳ 排队中...";
+          } else if (run.status === "in_progress") {
+            if (btn) btn.textContent = "⚡ 采集中...";
+          } else if (run.status === "completed") {
+            if (run.conclusion === "success") {
+              if (btn) btn.textContent = "✅ 同步中...";
+              await new Promise((r) => setTimeout(r, 2000));
+              await refreshData(false);
+              updateMetaLine("云端重采完成");
+              setTimeout(() => updateMetaLine(), 4000);
+            } else {
+              alert(`云端重采任务结束（状态：${run.conclusion || "未知"}），请稍后刷新查看或检查 GitHub Actions 日志。`);
+            }
+            return;
+          }
+        } catch {
+          // 忽略单次轮询网络波动
+        }
+      }
+      alert("云端重采仍在运行中，稍后页面将自动同步最新结果。");
+    }
+
+    async function triggerCloudCollect() {
+      if (isCollecting) return;
+      let token = (localStorage.getItem(GH_PAT_KEY) || "").trim();
+      if (!token) {
+        const input = prompt(
+          `首次使用「云端重采」需输入 GitHub Fine-grained Token（仅勾选 ${GH_REPO} 仓库 Actions: Read and write 权限，仅保存在本地浏览器）：`
+        );
+        if (!input || !input.trim()) return;
+        token = input.trim();
+      }
+
+      isCollecting = true;
+      const btn = document.getElementById("btnCollect");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ 触发中...";
+      }
+
+      const startedAt = Date.now();
+      try {
+        const dispatchUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${GH_WORKFLOW}/dispatches`;
+        const res = await fetch(dispatchUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+          body: JSON.stringify({ ref: "main" }),
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem(GH_PAT_KEY);
+          updateTokenStatusTip();
+          throw new Error("Token 无效或缺少 Actions: Read and write 权限，已清除本地密钥");
+        }
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        localStorage.setItem(GH_PAT_KEY, token);
+        updateTokenStatusTip();
+        if (btn) btn.textContent = "⏳ 已触发...";
+        updateMetaLine("已触发云端全网重采（约 2~3 分钟）");
+        await pollWorkflowCompletion(token, startedAt);
+      } catch (err) {
+        alert("云端重采失败：" + err.message);
+      } finally {
+        isCollecting = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "⚡ 云端重采";
+        }
+      }
+    }
+
     async function init() {
       document.getElementById("btnUsd").classList.toggle("active", displayCur === "USD");
       document.getElementById("btnCny").classList.toggle("active", displayCur === "CNY");
       document.getElementById("countrySearch").addEventListener("input", renderCountries);
+      updateTokenStatusTip();
 
       try {
-        const res = await fetch(`./data/latest.json?t=${Date.now()}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        appData = await res.json();
-
-        const cny = appData.rateInfo?.rates?.CNY;
-        document.getElementById("metaLine").textContent =
-          `更新于 ${fmtTime(appData.generatedAt)} · 1 USD ≈ ¥${cny ? cny.toFixed(3) : "-"} (${appData.rateInfo?.source || "实时汇率"})`;
+        appData = await fetchLatestData();
+        lastCheckedAt = Date.now();
+        updateMetaLine();
 
         renderCountries();
         renderDenoms();
@@ -904,8 +1168,18 @@
         renderSiteStatuses();
       } catch (err) {
         document.getElementById("metaLine").textContent = "数据加载失败";
-        document.getElementById("offerList").innerHTML = `<div class="panel empty">无法读取 ./data/latest.json：${err.message}</div>`;
+        document.getElementById("offerList").innerHTML = `<div class="panel empty">无法读取行情数据：${err.message}</div>`;
       }
+
+      setInterval(() => {
+        if (!document.hidden) refreshData(true);
+      }, 60000);
+
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && Date.now() - lastCheckedAt >= 60000) {
+          refreshData(true);
+        }
+      });
     }
 
     init();

@@ -10,7 +10,6 @@ import { collectTokenstore } from "./providers/tokenstore.mjs";
 import { collectCoinGate } from "./providers/coingate.mjs";
 import { collectByteTopup } from "./providers/bytetopup.mjs";
 import { collectBitrefillApi } from "./providers/bitrefill.mjs";
-import { collectKinguin } from "./providers/kinguin.mjs";
 import { collectKeys4Coins } from "./providers/keys4coins.mjs";
 import { collectBitGift } from "./providers/bitgift.mjs";
 import { collectEneba } from "./providers/eneba.mjs";
@@ -25,7 +24,6 @@ const ALL_SITES = [
   { id: "bytetopup", name: "ByteTopup", mode: "ssr", paymentType: "crypto" },
   { id: "bitrefill", name: "Bitrefill", mode: "api+browser", paymentType: "crypto" },
   { id: "kryptomate", name: "Kryptomate", mode: "browser", paymentType: "crypto" },
-  { id: "kinguin", name: "Kinguin", mode: "api", paymentType: "crypto" },
   { id: "keys4coins", name: "Keys4Coins", mode: "api", paymentType: "crypto" },
   { id: "bitgift", name: "BitGift", mode: "ssr", paymentType: "crypto" },
   { id: "eneba", name: "Eneba", mode: "ssr", paymentType: "fiat" },
@@ -82,7 +80,6 @@ export async function runCollect() {
     { id: "coingate", fn: () => collectCoinGate(rates) },
     { id: "bytetopup", fn: () => collectByteTopup(rates) },
     { id: "bitrefill", fn: () => collectBitrefillApi(rates) },
-    { id: "kinguin", fn: () => collectKinguin(rates) },
     { id: "keys4coins", fn: () => collectKeys4Coins(rates) },
     { id: "bitgift", fn: () => collectBitGift(rates) },
     { id: "eneba", fn: () => collectEneba(rates) },
@@ -248,7 +245,7 @@ export async function runCollect() {
 
   await fs.writeFile(path.join(DATA_DIR, "latest.json"), JSON.stringify(output), "utf8");
 
-  console.log("\n=== 13 大平台采集结果汇总 ===");
+  console.log("\n=== 12 大平台采集结果汇总 ===");
   for (const s of ALL_SITES) {
     const st = siteStats[s.id];
     console.log(
