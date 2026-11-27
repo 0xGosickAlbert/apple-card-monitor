@@ -46,7 +46,11 @@ export async function collectTamana() {
           const minFV = Number(p.minFaceValue);
           const maxFV = Number(p.maxFaceValue);
           const minPrice = Number(p.minPrice);
-          const inStock = p.stockCount === null || Number(p.stockCount) > 0;
+          const stockCount =
+            p.stockCount !== null && p.stockCount !== undefined && Number.isFinite(Number(p.stockCount))
+              ? Math.max(0, Math.floor(Number(p.stockCount)))
+              : null;
+          const inStock = stockCount === null ? true : stockCount > 0;
           const url = `https://tamana.bamboocardportal.com/`;
 
           if (!(minFV > 0) || !(minPrice > 0) || !(rate > 0)) continue;
@@ -67,6 +71,7 @@ export async function collectTamana() {
               payUsd: null,
               unitPayUsd: roundNum(unitPayUsd, 6),
               inStock,
+              stockCount,
               url,
               updatedAt: now,
             });
@@ -85,6 +90,7 @@ export async function collectTamana() {
               payUsd: roundNum(payUsd, 4),
               unitPayUsd: null,
               inStock,
+              stockCount,
               url,
               updatedAt: now,
             });

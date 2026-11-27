@@ -95,6 +95,11 @@ export async function collectByteTopup(rates = {}) {
           const retailPrice = Number(sku.retailPrice ?? sku.pricePresentation?.finalPrice ?? sku.pricePresentation?.unitPrice);
           const payCur = String(sku.currency || "USD").toUpperCase();
           const payUsd = payCur === "USD" || payCur === "USDT" ? retailPrice : (rates[payCur] ? retailPrice / rates[payCur] : null);
+          const rawCap = sku.remainingCapacity ?? sku.pricePresentation?.remainingCapacity;
+          const stockCount =
+            rawCap !== null && rawCap !== undefined && Number.isFinite(Number(rawCap))
+              ? Math.max(0, Math.floor(Number(rawCap)))
+              : null;
           const inStock = Boolean(sku.inStock ?? (sku.availability === "in_stock"));
 
           if (!(payUsd > 0)) continue;
@@ -117,6 +122,7 @@ export async function collectByteTopup(rates = {}) {
               payUsd: null,
               unitPayUsd: roundNum(unitPayUsd, 6),
               inStock,
+              stockCount,
               url: `${url}?skuId=${sku.id}`,
               updatedAt: now,
             });
@@ -136,6 +142,7 @@ export async function collectByteTopup(rates = {}) {
               payUsd: roundNum(payUsd, 4),
               unitPayUsd: null,
               inStock,
+              stockCount,
               url: `${url}?skuId=${sku.id}`,
               updatedAt: now,
             });

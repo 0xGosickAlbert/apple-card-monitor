@@ -2,7 +2,12 @@ name: 定时采集 Apple 礼品卡价格并发布 Pages
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "3,18,33,48 * * * *"
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "docs/data/latest.json"
   workflow_dispatch:
 
 permissions:
@@ -12,7 +17,7 @@ permissions:
 
 concurrency:
   group: "pages-monitor"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   collect-and-deploy:

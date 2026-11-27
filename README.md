@@ -36,6 +36,6 @@ npm start
    - 将 **Build and deployment → Source** 选择为 **GitHub Actions**。
 3. （可选）打开 **Settings → Secrets and variables → Actions → New repository secret**：
    - 添加 `BITREFILL_API_KEY`（填入您的 Bitrefill API Key）。
-   - 前往 **Actions** 页面点击 **Run workflow** 即可立即生成并发布公网网址（`https://<你的用户名>.github.io/<你的仓库名>/`），此后每 30 分钟自动更新一次！
+   - 前往 **Actions** 页面点击 **Run workflow** 即可立即生成并发布公网网址（`https://<你的用户名>.github.io/<你的仓库名>/`），此后每 15 分钟自动更新一次！
 
 > **关于 Kryptomate / Bitrefill 网页同步**：由于部分站点部署了 Cloudflare 人机盾，可在本地电脑运行 `npm run sync:browser` 并 `git push`，云端定时任务会自动保留并持续比对您的最新快照数据。

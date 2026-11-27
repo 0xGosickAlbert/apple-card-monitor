@@ -109,7 +109,12 @@ export async function collectCoinGate(rates = {}) {
           if (!(rate > 0)) continue;
 
           const payUsd = priceAmt / rate;
-          const inStock = !(gc.out_of_stock ?? meta.outOfStock);
+          const rawStock = gc.stock_count;
+          const stockCount =
+            rawStock !== null && rawStock !== undefined && Number.isFinite(Number(rawStock))
+              ? Math.max(0, Math.floor(Number(rawStock)))
+              : null;
+          const inStock = !(gc.out_of_stock ?? meta.outOfStock) && (stockCount === null || stockCount > 0);
           const url = `https://coingate.com/gift-cards/apple?country=${meta.rawCountry}`;
 
           if (meta.type === "range") {
@@ -126,6 +131,7 @@ export async function collectCoinGate(rates = {}) {
               payUsd: null,
               unitPayUsd: roundNum(payUsd / meta.probeVal, 6),
               inStock,
+              stockCount,
               url,
               updatedAt: now,
             });
@@ -143,6 +149,7 @@ export async function collectCoinGate(rates = {}) {
               payUsd: roundNum(payUsd, 4),
               unitPayUsd: null,
               inStock,
+              stockCount,
               url,
               updatedAt: now,
             });

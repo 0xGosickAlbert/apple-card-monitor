@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { COUNTRY_META, DATA_DIR, loadEnv, roundNum } from "./utils.mjs";
 import { fetchExchangeRates } from "./rates.mjs";
 import { collectTamana } from "./providers/tamana.mjs";
@@ -180,9 +181,16 @@ export async function runCollect() {
 
     // 真实汇率比例 = 实际支付 USD / 面值按国际汇率折算的 USD
     const fxRatio = roundNum(curUnit * rate * 100, 2); // 例如 96.85 代表占真实汇率的 96.85%
+    const stockCount =
+      o.stockCount !== null && o.stockCount !== undefined && Number.isFinite(Number(o.stockCount))
+        ? Math.max(0, Math.floor(Number(o.stockCount)))
+        : null;
+    const inStock = stockCount === 0 ? false : Boolean(o.inStock);
 
     finalOffers.push({
       ...o,
+      inStock,
+      stockCount,
       fxRatio,
       prevPayUsd,
       diffUsd,
@@ -229,7 +237,7 @@ export async function runCollect() {
   return output;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   runCollect().catch((err) => {
     console.error("采集运行出错:", err);
     process.exit(1);
