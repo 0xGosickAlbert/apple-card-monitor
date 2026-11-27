@@ -3,7 +3,7 @@ set -euo pipefail
 
 export PATH="/Users/gosick/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
-REPO_DIR="/Users/gosick/Documents/GitHub 礼品卡价格监控网站"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LOCK_DIR="/tmp/apple-card-monitor-sync.lock"
 
 # 防止重入；若锁目录超过 20 分钟（1200 秒）视为遗留死锁自动清理
