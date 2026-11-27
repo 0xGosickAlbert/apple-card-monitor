@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Apple 礼品卡全球实时比价与汇率浮动监控</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --accent: #0071e3;
+      --accent-soft: #eff6ff;
+      --green: #059669;
+      --green-soft: #ecfdf5;
+      --red: #dc2626;
+      --red-soft: #fef2f2;
+      --amber: #d97706;
+      --amber-soft: #fffbeb;
+      --shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+      padding-bottom: 48px;
+    }
+
+    .container {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 12px 14px;
+    }
+
+    /* 顶部栏 */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: rgba(244, 245, 247, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+    }
+    .topbar-inner {
+      max-width: 920px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .brand .meta {
+      font-size: 11.5px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .seg {
+      display: inline-flex;
+      background: #e5e7eb;
+      border-radius: 10px;
+      padding: 3px;
+      flex-shrink: 0;
+    }
+    .seg button {
+      border: 0;
+      background: transparent;
+      padding: 6px 11px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #4b5563;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .seg button.active {
+      background: #fff;
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    /* 通用卡片 */
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: var(--shadow);
+      margin-bottom: 12px;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .panel-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .panel-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* 搜索框 */
+    .search-box {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 14px;
+      background: #f9fafb;
+      outline: none;
+      margin-bottom: 10px;
+    }
+    .search-box:focus {
+      border-color: var(--accent);
+      background: #fff;
+    }
+
+    /* 国家网格 */
+    .country-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      max-height: 185px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 11px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text);
+      transition: all 0.12s;
+    }
+    .chip:hover { border-color: #9ca3af; }
+    .chip.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .chip .cnt {
+      font-size: 11px;
+      opacity: 0.72;
+    }
+
+    /* 面值选择区 */
+    .denom-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-bottom: 10px;
+    }
+    .denom-btn {
+      padding: 7px 12px;
+      border-radius: 9px;
+      border: 1px solid var(--border);
+      background: #f9fafb;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .denom-btn.active {
+      background: var(--text);
+      color: #fff;
+      border-color: var(--text);
+    }
+    .custom-denom {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .custom-denom input {
+      width: 140px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      font-size: 14px;
+      outline: none;
+    }
+    .custom-denom input:focus { border-color: var(--accent); }
+    .btn-sm {
+      padding: 8px 14px;
+      border: 0;
+      border-radius: 9px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* 汇率基准条 */
+    .fx-banner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 11px 14px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+      border: 1px solid #dbeafe;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+    .fx-banner strong { color: #1e40af; }
+
+    /* 比价列表 */
+    .offer-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .offer-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .offer-card.best {
+      border: 2px solid var(--green);
+      background: linear-gradient(to right, #ffffff, #f0fdf4);
+    }
+    .offer-card.out {
+      opacity: 0.58;
+    }
+    .offer-left {
+      min-width: 0;
+    }
+    .site-line {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .site-name {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .badge-best { background: var(--green); color: #fff; }
+    .badge-save { background: var(--green-soft); color: var(--green); }
+    .badge-prem { background: var(--red-soft); color: var(--red); }
+    .badge-flat { background: #f3f4f6; color: #4b5563; }
+    .badge-range { background: var(--accent-soft); color: var(--accent); }
+    .badge-out { background: #fee2e2; color: #991b1b; }
+    .badge-up { background: var(--red-soft); color: var(--red); }
+    .badge-down { background: var(--green-soft); color: var(--green); }
+
+    .detail-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      font-size: 12.5px;
+      color: var(--muted);
+      align-items: center;
+    }
+
+    .offer-right {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+    .pay-price {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .offer-card.best .pay-price { color: var(--green); }
+    .buy-link {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 8px;
+      background: #111827;
+      color: #fff;
+      text-decoration: none;
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+    .offer-card.best .buy-link { background: var(--green); }
+
+    /* 平台状态网格 */
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+      gap: 8px;
+    }
+    .status-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 11px;
+      font-size: 12px;
+      background: #fafafa;
+    }
+    .status-item .s-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot-ok { background: var(--green); }
+    .dot-warn { background: var(--amber); }
+    .dot-err { background: var(--red); }
+
+    .empty {
+      text-align: center;
+      padding: 28px 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    details summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    textarea.import-box {
+      width: 100%;
+      height: 110px;
+      margin-top: 8px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    @media (max-width: 520px) {
+      .offer-card {
+        grid-template-columns: 1fr;
+      }
+      .offer-right {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px dashed var(--border);
+        padding-top: 8px;
+      }
+      .brand h1 { font-size: 15.5px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <h1>🍎 Apple 礼品卡实时比价</h1>
+        <div class="meta" id="metaLine">正在加载最新全网行情...</div>
+      </div>
+      <div class="seg" role="group" aria-label="结算币种">
+        <button id="btnUsd" class="active" onclick="setDisplayCur('USD')">USDT ($)</button>
+        <button id="btnCny" onclick="setDisplayCur('CNY')">人民币 (¥)</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 国家选择 -->
+    <section class="panel">
+      <div class="panel-header">
+        <span class="panel-title">1. 选择国家 / 地区</span>
+        <span class="panel-sub" id="countrySummary">-</span>
+      </div>
+      <input
+        type="search"
+        id="countrySearch"
+        class="search-box"
+        placeholder="搜索国家或币种，例如：美国、日本、土耳其、TR、TRY、HKD..."
+      />
+      <div class="country-grid" id="countryGrid"></div>
+    </section>
+
+    <!-- 面值选择 -->
+    <section class="panel">
+      <div class="panel-header">
+        <span class="panel-title">2. 选择礼品卡面值规格</span>
+        <span class="panel-sub" id="denomHint">-</span>
+      </div>
+      <div class="denom-row" id="denomRow"></div>
+      <div class="custom-denom">
+        <input type="number" id="customValInput" min="1" step="any" placeholder="输入自定义面值" />
+        <button class="btn-sm" onclick="applyCustomVal()">比价查看</button>
+        <span class="panel-sub" id="customRangeTip"></span>
+      </div>
+    </section>
+
+    <!-- 真实汇率参考横幅 -->
+    <div class="fx-banner" id="fxBanner">
+      <span>正在计算真实国际汇率基准...</span>
+    </div>
+
+    <!-- 比价排行榜 -->
+    <section class="offer-list" id="offerList"></section>
+
+    <!-- 9大平台状态总览 -->
+    <section class="panel" style="margin-top: 16px;">
+      <div class="panel-header">
+        <span class="panel-title">3. 监控站点覆盖状态（共 9 家）</span>
+        <span class="panel-sub" id="totalStats">-</span>
+      </div>
+      <div class="status-grid" id="statusGrid"></div>
+
+      <details style="margin-top: 12px;">
+        <summary>本地手动覆盖 / 临时导入浏览器采集 JSON</summary>
+        <p class="panel-sub" style="margin: 6px 0;">
+          若在手机端需要临时叠加本地采集的报价 JSON（或浏览器缓存内容），粘贴到下方点击应用（仅保存在当前浏览器本地）。
+        </p>
+        <textarea id="importArea" class="import-box" placeholder='粘贴 offers 数组 JSON 或完整 browser-cache.json 内容'></textarea>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn-sm" onclick="importCustomOffers()">导入并比价</button>
+          <button class="btn-sm" style="background:#6b7280;" onclick="clearImported()">清除本地导入</button>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <script>
+    const POPULAR_ORDER = ["US", "JP", "HK", "TW", "TR", "GB", "AU", "CA", "DE", "SG", "NG", "IN", "AE", "SA", "FR", "KR"];
+    let appData = null;
+    let displayCur = localStorage.getItem("apple_disp_cur") || "USD";
+    let selectedCountry = localStorage.getItem("apple_country") || "US";
+    let selectedCurrency = "";
+    let selectedFaceValue = null;
+
+    function fmtTime(iso) {
+      if (!iso) return "未知";
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      return d.toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    }
+
+    function fmtMoney(usd, cur = displayCur) {
+      const cnyRate = appData?.rateInfo?.rates?.CNY || 7;
+      if (cur === "CNY") {
+        return "¥" + (usd * cnyRate).toFixed(2);
+      }
+      return "$" + usd.toFixed(2);
+    }
+
+    function setDisplayCur(cur) {
+      displayCur = cur;
+      localStorage.setItem("apple_disp_cur", cur);
+      document.getElementById("btnUsd").classList.toggle("active", cur === "USD");
+      document.getElementById("btnCny").classList.toggle("active", cur === "CNY");
+      renderOffers();
+    }
+
+    function getLocalImportedOffers() {
+      try {
+        const raw = localStorage.getItem("apple_imported_offers");
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function getAllOffers() {
+      const base = appData?.offers || [];
+      const extra = getLocalImportedOffers();
+      if (!extra.length) return base;
+      const extraSites = new Set(extra.map((o) => o.siteId));
+      return [...base.filter((o) => !extraSites.has(o.siteId)), ...extra];
+    }
+
+    function sortCountries(codes) {
+      return [...codes].sort((a, b) => {
+        const ia = POPULAR_ORDER.indexOf(a);
+        const ib = POPULAR_ORDER.indexOf(b);
+        if (ia !== -1 && ib !== -1) return ia - ib;
+        if (ia !== -1) return -1;
+        if (ib !== -1) return 1;
+        return a.localeCompare(b);
+      });
+    }
+
+    function renderCountries() {
+      const query = document.getElementById("countrySearch").value.trim().toLowerCase();
+      const offers = getAllOffers();
+      const countryMap = { ...(appData?.countries || {}) };
+
+      // 若导入了新国家则补充
+      for (const o of offers) {
+        if (!countryMap[o.country]) {
+          countryMap[o.country] = { code: o.country, name: o.country, en: o.country, flag: "🏳️", currency: o.currency };
+        }
+      }
+
+      const counts = {};
+      const sitesByCountry = {};
+      for (const o of offers) {
+        counts[o.country] = (counts[o.country] || 0) + 1;
+        if (!sitesByCountry[o.country]) sitesByCountry[o.country] = new Set();
+        sitesByCountry[o.country].add(o.siteId);
+      }
+
+      const allCodes = sortCountries(Object.keys(counts));
+      if (!counts[selectedCountry] && allCodes.length) {
+        selectedCountry = allCodes[0];
+      }
+
+      const filtered = allCodes.filter((cc) => {
+        if (!query) return true;
+        const m = countryMap[cc] || {};
+        return `${cc} ${m.name || ""} ${m.en || ""} ${m.currency || ""}`.toLowerCase().includes(query);
+      });
+
+      document.getElementById("countrySummary").textContent = `共覆盖 ${allCodes.length} 个国家/地区`;
+      const grid = document.getElementById("countryGrid");
+      grid.innerHTML = filtered
+        .map((cc) => {
+          const m = countryMap[cc] || { name: cc, flag: "🏳️", currency: "" };
+          const sCount = sitesByCountry[cc]?.size || 0;
+          const active = cc === selectedCountry ? "active" : "";
+          return `<button class="chip ${active}" onclick="selectCountry('${cc}')">${m.flag || ""} ${m.name} <span class="cnt">${cc}·${sCount}站</span></button>`;
+        })
+        .join("");
+    }
+
+    function selectCountry(cc) {
+      selectedCountry = cc;
+      localStorage.setItem("apple_country", cc);
+      selectedFaceValue = null;
+      renderCountries();
+      renderDenoms();
+      renderOffers();
+    }
+
+    function renderDenoms() {
+      const cOffers = getAllOffers().filter((o) => o.country === selectedCountry);
+      const curList = [...new Set(cOffers.map((o) => o.currency))];
+      if (!selectedCurrency || !curList.includes(selectedCurrency)) {
+        selectedCurrency = curList[0] || "USD";
+      }
+
+      const curOffers = cOffers.filter((o) => o.currency === selectedCurrency);
+      const fixedVals = [...new Set(curOffers.filter((o) => o.type === "fixed").map((o) => o.faceValue))].sort((a, b) => a - b);
+      const ranges = curOffers.filter((o) => o.type === "range");
+
+      // 合并固定面值与常见区间标准档位
+      const standardCandidates = [5, 10, 15, 20, 25, 30, 50, 100, 150, 200, 500, 1000, 1500, 3000, 5000, 10000];
+      const mergedVals = new Set(fixedVals);
+      for (const r of ranges) {
+        for (const v of standardCandidates) {
+          if (v >= r.minFaceValue && v <= r.maxFaceValue) {
+            mergedVals.add(v);
+          }
+        }
+        if (mergedVals.size === 0) {
+          mergedVals.add(Math.ceil(r.minFaceValue));
+        }
+      }
+
+      const sortedVals = [...mergedVals].sort((a, b) => a - b);
+      if (!selectedFaceValue || !sortedVals.includes(selectedFaceValue)) {
+        // 优先默认选常见中位档，如 50 / 100 / 1000 / 首个值
+        selectedFaceValue =
+          sortedVals.find((v) => v === 50 || v === 100 || v === 1000) ??
+          sortedVals[Math.min(2, sortedVals.length - 1)] ??
+          10;
+      }
+
+      document.getElementById("denomHint").textContent = `面值币种: ${selectedCurrency}`;
+      const row = document.getElementById("denomRow");
+      row.innerHTML = sortedVals
+        .map((v) => {
+          const active = v === selectedFaceValue ? "active" : "";
+          return `<button class="denom-btn ${active}" onclick="selectDenom(${v})">${v} ${selectedCurrency}</button>`;
+        })
+        .join("");
+
+      const rangeTip = ranges.length
+        ? `支持自定义区间: ${Math.min(...ranges.map((r) => r.minFaceValue))} ~ ${Math.max(...ranges.map((r) => r.maxFaceValue))} ${selectedCurrency}`
+        : "当前国家均为固定面值";
+      document.getElementById("customRangeTip").textContent = rangeTip;
+      document.getElementById("customValInput").value = selectedFaceValue ?? "";
+    }
+
+    function selectDenom(v) {
+      selectedFaceValue = Number(v);
+      document.getElementById("customValInput").value = selectedFaceValue;
+      renderDenoms();
+      renderOffers();
+    }
+
+    function applyCustomVal() {
+      const val = Number(document.getElementById("customValInput").value);
+      if (!(val > 0)) return;
+      selectedFaceValue = val;
+      renderDenoms();
+      renderOffers();
+    }
+
+    function renderOffers() {
+      const listEl = document.getElementById("offerList");
+      const fxBanner = document.getElementById("fxBanner");
+      const fv = Number(selectedFaceValue);
+      const cur = selectedCurrency;
+      const rate = cur === "USD" || cur === "USDT" ? 1 : appData?.rateInfo?.rates?.[cur];
+
+      if (!(fv > 0) || !(rate > 0)) {
+        fxBanner.innerHTML = "<span>请选择国家与面值以查看比价</span>";
+        listEl.innerHTML = `<div class="panel empty">暂无该国汇率或报价数据</div>`;
+        return;
+      }
+
+      const realUsd = fv / rate;
+      const cnyRate = appData?.rateInfo?.rates?.CNY || 7;
+      const cMeta = appData?.countries?.[selectedCountry] || { name: selectedCountry, flag: "" };
+      fxBanner.innerHTML = `
+        <div>
+          ${cMeta.flag || ""} <strong>${cMeta.name} ${fv} ${cur}</strong> 按国际真实汇率值：
+          <strong>$${realUsd.toFixed(2)} USD</strong>（≈ <strong>¥${(realUsd * cnyRate).toFixed(2)} CNY</strong>）
+        </div>
+        <div class="panel-sub">实时汇率: 1 USD = ${rate.toFixed(4)} ${cur}</div>
+      `;
+
+      // 筛选当前国家+币种中匹配该面值的报价（精确固定面值 或 涵盖该面值的区间卡）
+      const candidates = getAllOffers().filter((o) => {
+        if (o.country !== selectedCountry || o.currency !== cur) return false;
+        if (o.type === "fixed") return Math.abs(o.faceValue - fv) < 1e-6;
+        if (o.type === "range") {
+          const inBounds = fv >= o.minFaceValue && fv <= o.maxFaceValue;
+          if (!inBounds) return false;
+          const step = o.step || 1;
+          if (step > 1) {
+            return Math.abs(((fv - o.minFaceValue) / step) - Math.round((fv - o.minFaceValue) / step)) < 1e-4;
+          }
+          return true;
+        }
+        return false;
+      });
+
+      if (!candidates.length) {
+        listEl.innerHTML = `<div class="panel empty">暂无平台提供 <b>${fv} ${cur}</b> 的报价，请尝试点击上方其他标准面值按钮。</div>`;
+        return;
+      }
+
+      const computed = candidates.map((o) => {
+        const payUsd = o.type === "range" ? fv * o.unitPayUsd : o.payUsd;
+        const fxRatio = (payUsd / realUsd) * 100;
+        const diffPctFromReal = fxRatio - 100;
+        return { ...o, calcPayUsd: payUsd, calcFxRatio: fxRatio, diffPctFromReal };
+      });
+
+      // 有货优先，按支付价格由低到高排序
+      computed.sort((a, b) => {
+        if (a.inStock !== b.inStock) return a.inStock ? -1 : 1;
+        return a.calcPayUsd - b.calcPayUsd;
+      });
+
+      const inStockList = computed.filter((x) => x.inStock);
+      const bestOffer = inStockList[0] || computed[0];
+      const secondOffer = inStockList[1];
+
+      listEl.innerHTML = computed
+        .map((o, idx) => {
+          const isBest = o === bestOffer && o.inStock;
+          const saveVsSecond = isBest && secondOffer ? secondOffer.calcPayUsd - o.calcPayUsd : 0;
+
+          const ratioText =
+            o.diffPctFromReal <= 0
+              ? `<span class="badge badge-save">真实汇率 ${o.calcFxRatio.toFixed(2)}% · 省 ${Math.abs(o.diffPctFromReal).toFixed(2)}%</span>`
+              : `<span class="badge badge-prem">真实汇率 ${o.calcFxRatio.toFixed(2)}% · 溢价 +${o.diffPctFromReal.toFixed(2)}%</span>`;
+
+          let changeHtml = `<span class="badge badge-flat">价格平稳</span>`;
+          if (o.diffPct !== null && o.diffPct !== undefined && Math.abs(o.diffPct) >= 0.01) {
+            if (o.diffPct < 0) {
+              changeHtml = `<span class="badge badge-down">↓ 降 ${Math.abs(o.diffPct).toFixed(2)}%</span>`;
+            } else {
+              changeHtml = `<span class="badge badge-up">↑ 涨 +${o.diffPct.toFixed(2)}%</span>`;
+            }
+          } else if (o.prevPayUsd === null) {
+            changeHtml = `<span class="badge badge-flat">首次基准</span>`;
+          }
+
+          const typeBadge =
+            o.type === "range"
+              ? `<span class="badge badge-range">自定义区间 (${o.minFaceValue}~${o.maxFaceValue})</span>`
+              : `<span class="badge badge-flat">固定面值</span>`;
+
+          const stockBadge = o.inStock ? "" : `<span class="badge badge-out">暂缺货</span>`;
+          const bestBadge = isBest ? `<span class="badge badge-best">🏆 最便宜</span>` : `<span class="badge badge-flat">#${idx + 1}</span>`;
+          const saveTip = saveVsSecond > 0.005 ? `<span style="color:var(--green);font-weight:600;">比第2名省 ${fmtMoney(saveVsSecond)}</span>` : "";
+
+          return `
+            <article class="offer-card ${isBest ? "best" : ""} ${o.inStock ? "" : "out"}">
+              <div class="offer-left">
+                <div class="site-line">
+                  ${bestBadge}
+                  <span class="site-name">${o.siteName}</span>
+                  ${typeBadge}
+                  ${stockBadge}
+                </div>
+                <div class="detail-line">
+                  ${ratioText}
+                  ${changeHtml}
+                  ${saveTip}
+                  <span>更新: ${fmtTime(o.updatedAt)}</span>
+                </div>
+              </div>
+              <div class="offer-right">
+                <div>
+                  <div class="pay-price">${fmtMoney(o.calcPayUsd)} <span style="font-size:12px;font-weight:600;color:var(--muted);">${displayCur === "USD" ? "USDT" : "CNY"}</span></div>
+                  <div class="panel-sub">${displayCur === "USD" ? `≈ ¥${(o.calcPayUsd * cnyRate).toFixed(2)}` : `≈ $${o.calcPayUsd.toFixed(2)} USDT`}</div>
+                </div>
+                <a class="buy-link" href="${o.url}" target="_blank" rel="noopener noreferrer">去购买 ↗</a>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+    }
+
+    function renderSiteStatuses() {
+      const grid = document.getElementById("statusGrid");
+      const sites = appData?.sites || {};
+      const entries = Object.entries(sites);
+      document.getElementById("totalStats").textContent = `总计 ${getAllOffers().length} 条报价`;
+
+      const statusLabel = {
+        ok: "API 直连",
+        api_ok: "API 直连",
+        browser_cache: "浏览器快照",
+        stale_cache: "缓存兜底",
+        pending_browser_sync: "待浏览器同步",
+        restricted_or_empty: "需浏览器同步",
+        no_key: "未配密钥",
+        error: "请求异常",
+      };
+
+      grid.innerHTML = entries
+        .map(([id, st]) => {
+          const ok = st.offerCount > 0;
+          const dotClass = ok ? (st.status === "stale_cache" ? "dot-warn" : "dot-ok") : "dot-err";
+          return `
+            <div class="status-item">
+              <div class="s-top">
+                <span>${st.name || id}</span>
+                <span><span class="dot ${dotClass}"></span> ${statusLabel[st.status] || st.status}</span>
+              </div>
+              <div class="panel-sub">国家: ${st.countryCount} | 规格: ${st.offerCount}</div>
+              <div class="panel-sub">同步: ${fmtTime(st.updatedAt)}</div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    function importCustomOffers() {
+      const raw = document.getElementById("importArea").value.trim();
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        let list = [];
+        if (Array.isArray(parsed)) {
+          list = parsed;
+        } else if (parsed?.sites) {
+          for (const s of Object.values(parsed.sites)) {
+            if (Array.isArray(s?.offers)) list.push(...s.offers);
+          }
+        } else if (Array.isArray(parsed?.offers)) {
+          list = parsed.offers;
+        }
+        if (!list.length) {
+          alert("未在 JSON 中找到有效的 offers 报价列表");
+          return;
+        }
+        localStorage.setItem("apple_imported_offers", JSON.stringify(list));
+        renderCountries();
+        renderDenoms();
+        renderOffers();
+        renderSiteStatuses();
+        alert(`成功导入 ${list.length} 条报价！`);
+      } catch (e) {
+        alert("JSON 格式解析失败: " + e.message);
+      }
+    }
+
+    function clearImported() {
+      localStorage.removeItem("apple_imported_offers");
+      document.getElementById("importArea").value = "";
+      renderCountries();
+      renderDenoms();
+      renderOffers();
+      renderSiteStatuses();
+    }
+
+    async function init() {
+      document.getElementById("btnUsd").classList.toggle("active", displayCur === "USD");
+      document.getElementById("btnCny").classList.toggle("active", displayCur === "CNY");
+      document.getElementById("countrySearch").addEventListener("input", renderCountries);
+
+      try {
+        const res = await fetch(`./data/latest.json?t=${Date.now()}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        appData = await res.json();
+
+        const cny = appData.rateInfo?.rates?.CNY;
+        document.getElementById("metaLine").textContent =
+          `更新于 ${fmtTime(appData.generatedAt)} · 1 USD ≈ ¥${cny ? cny.toFixed(3) : "-"} (${appData.rateInfo?.source || "实时汇率"})`;
+
+        renderCountries();
+        renderDenoms();
+        renderOffers();
+        renderSiteStatuses();
+      } catch (err) {
+        document.getElementById("metaLine").textContent = "数据加载失败";
+        document.getElementById("offerList").innerHTML = `<div class="panel empty">无法读取 ./data/latest.json：${err.message}</div>`;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

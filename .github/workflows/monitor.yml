@@ -1,0 +1,53 @@
+name: 定时采集 Apple 礼品卡价格并发布 Pages
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages-monitor"
+  cancel-in-progress: true
+
+jobs:
+  collect-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 执行全网 Apple 礼品卡价格与汇率采集
+        env:
+          BITREFILL_API_KEY: ${{ secrets.BITREFILL_API_KEY }}
+        run: npm run collect
+
+      - name: 保存最新历史快照到仓库
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data/latest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: 更新 Apple 礼品卡价格监控快照"
+            git push
+          else
+            echo "价格数据无变化，跳过提交"
+          fi
+
+      - name: 上传 Pages 构建产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

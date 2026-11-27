@@ -1,0 +1,13 @@
+{
+  "name": "apple-giftcard-monitor",
+  "version": "1.0.0",
+  "description": "Apple 礼品卡 9 大平台全球实时比价与汇率浮动监控系统",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "collect": "node scripts/collect.mjs",
+    "sync:browser": "node scripts/sync-browser.mjs",
+    "collect:all": "node scripts/sync-browser.mjs",
+    "start": "node scripts/serve.mjs"
+  }
+}
