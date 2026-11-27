@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { COUNTRY_META, DATA_DIR, loadEnv, roundNum } from "./utils.mjs";
+import { COUNTRY_META, DATA_DIR, EXCLUDED_COUNTRIES, loadEnv, roundNum } from "./utils.mjs";
 import { fetchExchangeRates } from "./rates.mjs";
 import { collectTamana } from "./providers/tamana.mjs";
 import { collectCryptoRefills } from "./providers/cryptorefills.mjs";
@@ -10,8 +10,6 @@ import { collectTokenstore } from "./providers/tokenstore.mjs";
 import { collectCoinGate } from "./providers/coingate.mjs";
 import { collectByteTopup } from "./providers/bytetopup.mjs";
 import { collectBitrefillApi } from "./providers/bitrefill.mjs";
-
-const EXCLUDED_COUNTRIES = new Set(["KR", "MY"]);
 
 const ALL_SITES = [
   { id: "tamana", name: "Tamana", mode: "api" },

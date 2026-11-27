@@ -1,4 +1,4 @@
-import { fetchJson, isAppleBrandName, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
+import { EXCLUDED_COUNTRIES, fetchJson, isAppleBrandName, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
 
 const SITE_ID = "cryptorefills";
 const SITE_NAME = "CryptoRefills";
@@ -21,7 +21,7 @@ export async function collectCryptoRefills(rates = {}) {
   const seenKeys = new Set();
 
   await mapLimit(
-    TARGET_COUNTRIES,
+    TARGET_COUNTRIES.filter((cc) => !EXCLUDED_COUNTRIES.has(cc)),
     5,
     async (cc) => {
       try {

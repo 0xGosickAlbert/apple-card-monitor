@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { DATA_DIR, isAppleBrandName, normalizeCountry, roundNum } from "./utils.mjs";
+import { DATA_DIR, EXCLUDED_COUNTRIES, isAppleBrandName, normalizeCountry, roundNum } from "./utils.mjs";
 import { runCollect } from "./collect.mjs";
 
 const CACHE_FILE = path.join(DATA_DIR, "browser-cache.json");
@@ -36,7 +36,7 @@ function parseKryptomateOffers(giftCards, now) {
     if (!isAppleBrandName(gc.name)) continue;
     const isActive = String(gc.status || "ACTIVE").toUpperCase() === "ACTIVE";
     const country = normalizeCountry(gc.countryCode || gc.countries?.[0], gc.name);
-    if (country === "KR" || country === "MY") continue;
+    if (EXCLUDED_COUNTRIES.has(country)) continue;
     const url = gc.slug
       ? `https://kryptomate.com/zh/gift-cards/${gc.slug}`
       : "https://kryptomate.com/zh/gift-cards?query=Apple";
@@ -99,7 +99,7 @@ function parseBitrefillOffers(products, now) {
   for (const det of products || []) {
     if (!det || !isAppleBrandName(det.name || det.baseName)) continue;
     const country = normalizeCountry(det.countryCode || det.countries?.[0], det.name);
-    if (country === "KR" || country === "MY") continue;
+    if (EXCLUDED_COUNTRIES.has(country)) continue;
     const currency = String(det.currency || "USD").toUpperCase();
     const inStock = !det.outOfStock;
     const url = `https://www.bitrefill.com/${country.toLowerCase()}/en/gift-cards/${det.slug}/`;

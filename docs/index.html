@@ -144,9 +144,6 @@
       display: flex;
       flex-wrap: wrap;
       gap: 7px;
-      max-height: 185px;
-      overflow-y: auto;
-      padding-right: 2px;
     }
     .chip {
       display: inline-flex;
@@ -424,7 +421,7 @@
         type="search"
         id="countrySearch"
         class="search-box"
-        placeholder="搜索国家或币种，例如：美国、日本、土耳其、TR、TRY、HKD..."
+        placeholder="搜索国家或币种，例如：美国、日本、土耳其、TR、TRY、JPY..."
       />
       <div class="country-grid" id="countryGrid"></div>
     </section>
@@ -474,7 +471,6 @@
   </main>
 
   <script>
-    const POPULAR_ORDER = ["US", "JP", "HK", "TW", "TR", "GB", "AU", "CA", "DE", "SG", "NG", "IN", "AE", "SA", "FR"];
     let appData = null;
     let displayCur = localStorage.getItem("apple_disp_cur") || "USD";
     let selectedCountry = localStorage.getItem("apple_country") || "US";
@@ -522,14 +518,7 @@
     }
 
     function sortCountries(codes) {
-      return [...codes].sort((a, b) => {
-        const ia = POPULAR_ORDER.indexOf(a);
-        const ib = POPULAR_ORDER.indexOf(b);
-        if (ia !== -1 && ib !== -1) return ia - ib;
-        if (ia !== -1) return -1;
-        if (ib !== -1) return 1;
-        return a.localeCompare(b);
-      });
+      return [...codes].sort((a, b) => a.localeCompare(b));
     }
 
     function renderCountries() {

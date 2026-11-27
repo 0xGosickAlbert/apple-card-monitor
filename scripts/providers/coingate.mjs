@@ -1,4 +1,4 @@
-import { fetchJson, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
+import { EXCLUDED_COUNTRIES, fetchJson, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
 
 const SITE_ID = "coingate";
 const SITE_NAME = "CoinGate";
@@ -33,7 +33,7 @@ export async function collectCoinGate(rates = {}) {
     }
     const countries = (baseData?.countries || [])
       .map((c) => String(c.value || "").toUpperCase())
-      .filter((cc) => cc && cc !== "KR" && cc !== "MY");
+      .filter((cc) => cc && !EXCLUDED_COUNTRIES.has(cc));
     if (!countries.length) countries.push("US");
 
     await mapLimit(

@@ -1,4 +1,4 @@
-import { fetchJson, mapLimit, normalizeCountry, roundNum, sleep } from "../utils.mjs";
+import { EXCLUDED_COUNTRIES, fetchJson, mapLimit, normalizeCountry, roundNum, sleep } from "../utils.mjs";
 
 const SITE_ID = "coinsbee";
 const SITE_NAME = "Coinsbee";
@@ -39,7 +39,7 @@ export async function collectCoinsbee() {
     const info = await fetchJson(`${API_BASE}/brands/info/Apple/en/us`, {}, { timeoutMs: 15000 });
     appleCountries = (Array.isArray(info?.countries) ? info.countries : [])
       .map((c) => String(c).toLowerCase())
-      .filter((cc) => cc && cc !== "kr" && cc !== "my");
+      .filter((cc) => cc && !EXCLUDED_COUNTRIES.has(cc.toUpperCase()));
   } catch (err) {
     console.warn(`[Coinsbee] Apple 国家目录拉取失败: ${err.message}`);
   }
@@ -48,7 +48,7 @@ export async function collectCoinsbee() {
     const info = await fetchJson(`${API_BASE}/brands/info/iTunes/en/us`, {}, { timeoutMs: 15000 });
     itunesCountries = (Array.isArray(info?.countries) ? info.countries : [])
       .map((c) => String(c).toLowerCase())
-      .filter((cc) => cc && cc !== "kr" && cc !== "my");
+      .filter((cc) => cc && !EXCLUDED_COUNTRIES.has(cc.toUpperCase()));
   } catch (err) {
     console.warn(`[Coinsbee] iTunes 国家目录拉取失败: ${err.message}`);
   }

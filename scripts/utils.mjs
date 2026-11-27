@@ -226,6 +226,7 @@ export const COUNTRY_META = {
   CL: { name: "智利", en: "Chile", flag: "🇨🇱", currency: "CLP" },
   CO: { name: "哥伦比亚", en: "Colombia", flag: "🇨🇴", currency: "COP" },
   CN: { name: "中国大陆", en: "China", flag: "🇨🇳", currency: "CNY" },
+  RU: { name: "俄罗斯", en: "Russia", flag: "🇷🇺", currency: "RUB" },
   EU: { name: "欧元区", en: "Europe", flag: "🇪🇺", currency: "EUR" },
   WW: { name: "全球", en: "Global", flag: "🌐", currency: "USD" },
 };
@@ -294,9 +295,12 @@ const NAME_TO_CODE = {
   bahrain: "BH",
   oman: "OM",
   china: "CN",
+  russia: "RU",
   europe: "EU",
   global: "WW",
 };
+
+export const EXCLUDED_COUNTRIES = new Set(["KR", "MY", "HK", "DM"]);
 
 /**
  * 归一化国家代码（ISO 3166-1 alpha-2 大写）
