@@ -41,12 +41,31 @@ elif [ "$SYNC_CODE" -ne 0 ]; then
   exit "$SYNC_CODE"
 fi
 
-if git diff --quiet docs/data/browser-cache.json; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] 浏览器快照无变化，跳过推送"
+if ! git diff --quiet docs/data/browser-cache.json; then
+  git add docs/data/browser-cache.json
+  git commit -m "chore: 定时同步 Bitrefill & Kryptomate 浏览器快照"
+fi
+
+# 检查是否存在待推送提交（含上次偶发网络失败遗留的提交）
+AHEAD_COUNT=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+if [ "$AHEAD_COUNT" -eq 0 ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] 浏览器快照无变化且无待推送提交，跳过推送"
   exit 0
 fi
 
-git add docs/data/browser-cache.json
-git commit -m "chore: 定时同步 Bitrefill & Kryptomate 浏览器快照"
-git -c http.version=HTTP/1.1 push origin main || (git -c http.version=HTTP/1.1 pull --rebase origin main && git -c http.version=HTTP/1.1 push origin main)
+PUSH_OK=0
+for i in 1 2 3; do
+  if git -c http.version=HTTP/1.1 push origin main; then
+    PUSH_OK=1
+    break
+  fi
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] 第 $i 次推送失败，5秒后重试..."
+  sleep 5
+  git -c http.version=HTTP/1.1 pull --rebase --autostash origin main >/dev/null 2>&1 || true
+done
+
+if [ "$PUSH_OK" -ne 1 ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] 推送失败，已保留本地快照提交，等待下轮重推"
+  exit 1
+fi
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 已推送最新浏览器快照，将自动触发云端重新采集并部署"
