@@ -10,17 +10,29 @@ import { collectTokenstore } from "./providers/tokenstore.mjs";
 import { collectCoinGate } from "./providers/coingate.mjs";
 import { collectByteTopup } from "./providers/bytetopup.mjs";
 import { collectBitrefillApi } from "./providers/bitrefill.mjs";
+import { collectKinguin } from "./providers/kinguin.mjs";
+import { collectKeys4Coins } from "./providers/keys4coins.mjs";
+import { collectBitGift } from "./providers/bitgift.mjs";
+import { collectEneba } from "./providers/eneba.mjs";
+import { collectRecharge } from "./providers/recharge.mjs";
 
 const ALL_SITES = [
-  { id: "tamana", name: "Tamana", mode: "api" },
-  { id: "cryptorefills", name: "CryptoRefills", mode: "api" },
-  { id: "coinsbee", name: "Coinsbee", mode: "api" },
-  { id: "tokenstore", name: "Tokenstore", mode: "ssr" },
-  { id: "coingate", name: "CoinGate", mode: "api" },
-  { id: "bytetopup", name: "ByteTopup", mode: "ssr" },
-  { id: "bitrefill", name: "Bitrefill", mode: "api+browser" },
-  { id: "kryptomate", name: "Kryptomate", mode: "browser" },
+  { id: "tamana", name: "Tamana", mode: "api", paymentType: "crypto" },
+  { id: "cryptorefills", name: "CryptoRefills", mode: "api", paymentType: "crypto" },
+  { id: "coinsbee", name: "Coinsbee", mode: "api", paymentType: "crypto" },
+  { id: "tokenstore", name: "Tokenstore", mode: "ssr", paymentType: "crypto" },
+  { id: "coingate", name: "CoinGate", mode: "api", paymentType: "crypto" },
+  { id: "bytetopup", name: "ByteTopup", mode: "ssr", paymentType: "crypto" },
+  { id: "bitrefill", name: "Bitrefill", mode: "api+browser", paymentType: "crypto" },
+  { id: "kryptomate", name: "Kryptomate", mode: "browser", paymentType: "crypto" },
+  { id: "kinguin", name: "Kinguin", mode: "api", paymentType: "crypto" },
+  { id: "keys4coins", name: "Keys4Coins", mode: "api", paymentType: "crypto" },
+  { id: "bitgift", name: "BitGift", mode: "ssr", paymentType: "crypto" },
+  { id: "eneba", name: "Eneba", mode: "ssr", paymentType: "fiat" },
+  { id: "recharge", name: "Recharge", mode: "ssr", paymentType: "fiat" },
 ];
+
+const SITE_META_MAP = new Map(ALL_SITES.map((s) => [s.id, s]));
 
 async function readJsonIfExists(filePath) {
   try {
@@ -70,6 +82,11 @@ export async function runCollect() {
     { id: "coingate", fn: () => collectCoinGate(rates) },
     { id: "bytetopup", fn: () => collectByteTopup(rates) },
     { id: "bitrefill", fn: () => collectBitrefillApi(rates) },
+    { id: "kinguin", fn: () => collectKinguin(rates) },
+    { id: "keys4coins", fn: () => collectKeys4Coins(rates) },
+    { id: "bitgift", fn: () => collectBitGift(rates) },
+    { id: "eneba", fn: () => collectEneba(rates) },
+    { id: "recharge", fn: () => collectRecharge(rates) },
   ];
 
   const siteStats = {};
@@ -114,8 +131,10 @@ export async function runCollect() {
     offers = offers.filter((o) => !EXCLUDED_COUNTRIES.has(o.country));
     mergedOffers.push(...offers);
     const countriesCount = new Set(offers.map((o) => o.country)).size;
+    const siteMeta = SITE_META_MAP.get(r.id);
     siteStats[r.id] = {
-      name: ALL_SITES.find((s) => s.id === r.id)?.name || r.id,
+      name: siteMeta?.name || r.id,
+      paymentType: siteMeta?.paymentType || "crypto",
       status,
       error: r.error,
       offerCount: offers.length,
@@ -134,6 +153,7 @@ export async function runCollect() {
   mergedOffers.push(...kmOffers);
   siteStats.kryptomate = {
     name: "Kryptomate",
+    paymentType: "crypto",
     status: kmOffers.length ? "browser_cache" : "pending_browser_sync",
     error: null,
     offerCount: kmOffers.length,
@@ -186,9 +206,11 @@ export async function runCollect() {
         ? Math.max(0, Math.floor(Number(o.stockCount)))
         : null;
     const inStock = stockCount === 0 ? false : Boolean(o.inStock);
+    const paymentType = o.paymentType || SITE_META_MAP.get(o.siteId)?.paymentType || "crypto";
 
     finalOffers.push({
       ...o,
+      paymentType,
       inStock,
       stockCount,
       fxRatio,
@@ -226,7 +248,7 @@ export async function runCollect() {
 
   await fs.writeFile(path.join(DATA_DIR, "latest.json"), JSON.stringify(output), "utf8");
 
-  console.log("\n=== 8 大平台采集结果汇总 ===");
+  console.log("\n=== 13 大平台采集结果汇总 ===");
   for (const s of ALL_SITES) {
     const st = siteStats[s.id];
     console.log(

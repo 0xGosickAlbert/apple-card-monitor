@@ -289,6 +289,8 @@
     .badge-out { background: #fee2e2; color: #991b1b; }
     .badge-stock { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
     .badge-stock-low { background: var(--amber-soft); color: var(--amber); border: 1px solid #fde68a; }
+    .badge-fiat { background: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; }
+    .badge-fee { background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; }
     .badge-up { background: var(--red-soft); color: var(--red); }
     .badge-down { background: var(--green-soft); color: var(--green); }
 
@@ -448,10 +450,10 @@
     <!-- 比价排行榜 -->
     <section class="offer-list" id="offerList"></section>
 
-    <!-- 8大平台状态总览 -->
+    <!-- 13大平台状态总览 -->
     <section class="panel" style="margin-top: 16px;">
       <div class="panel-header">
-        <span class="panel-title">3. 监控站点覆盖状态（共 8 家）</span>
+        <span class="panel-title">3. 监控站点覆盖状态（共 13 家）</span>
         <span class="panel-sub" id="totalStats">-</span>
       </div>
       <div class="status-grid" id="statusGrid"></div>
@@ -756,7 +758,25 @@
             stockBadge = `<span class="badge ${cls}">${label}</span>`;
           }
           const bestBadge = isBest ? `<span class="badge badge-best">🏆 最便宜</span>` : `<span class="badge badge-flat">#${idx + 1}</span>`;
+          const isFiat = o.paymentType === "fiat";
+          const fiatBadge = isFiat ? `<span class="badge badge-fiat">法币支付</span>` : "";
+          const feeBadge =
+            o.siteId === "kinguin" || o.siteId === "eneba"
+              ? `<span class="badge badge-fee">不含结账服务费</span>`
+              : o.siteId === "keys4coins"
+                ? `<span class="badge badge-fee">主流加密币</span>`
+                : "";
           const saveTip = saveVsSecond > 0.005 ? `<span style="color:var(--green);font-weight:600;">比第2名省 ${fmtMoney(saveVsSecond)}</span>` : "";
+          const unitLabel = isFiat
+            ? (displayCur === "USD" ? "USD · 法币" : "CNY · 法币")
+            : (displayCur === "USD" ? "USDT" : "CNY");
+          const subPriceText = isFiat
+            ? (displayCur === "USD"
+              ? `≈ ¥${(o.calcPayUsd * cnyRate).toFixed(2)}（法币结算）`
+              : `≈ $${o.calcPayUsd.toFixed(2)} USD（法币）`)
+            : (displayCur === "USD"
+              ? `≈ ¥${(o.calcPayUsd * cnyRate).toFixed(2)}`
+              : `≈ $${o.calcPayUsd.toFixed(2)} USDT`);
 
           return `
             <article class="offer-card ${isBest ? "best" : ""} ${o.inStock ? "" : "out"}">
@@ -765,6 +785,8 @@
                   ${bestBadge}
                   <span class="site-name">${o.siteName}</span>
                   ${typeBadge}
+                  ${fiatBadge}
+                  ${feeBadge}
                   ${stockBadge}
                 </div>
                 <div class="detail-line">
@@ -776,8 +798,8 @@
               </div>
               <div class="offer-right">
                 <div>
-                  <div class="pay-price">${fmtMoney(o.calcPayUsd)} <span style="font-size:12px;font-weight:600;color:var(--muted);">${displayCur === "USD" ? "USDT" : "CNY"}</span></div>
-                  <div class="panel-sub">${displayCur === "USD" ? `≈ ¥${(o.calcPayUsd * cnyRate).toFixed(2)}` : `≈ $${o.calcPayUsd.toFixed(2)} USDT`}</div>
+                  <div class="pay-price">${fmtMoney(o.calcPayUsd)} <span style="font-size:12px;font-weight:600;color:${isFiat ? "#7e22ce" : "var(--muted)"};">${unitLabel}</span></div>
+                  <div class="panel-sub">${subPriceText}</div>
                 </div>
                 <a class="buy-link" href="${o.url}" target="_blank" rel="noopener noreferrer">去购买 ↗</a>
               </div>
@@ -808,10 +830,11 @@
         .map(([id, st]) => {
           const ok = st.offerCount > 0;
           const dotClass = ok ? (st.status === "stale_cache" ? "dot-warn" : "dot-ok") : "dot-err";
+          const fiatTag = st.paymentType === "fiat" ? `<span class="badge badge-fiat" style="margin-left:4px;font-size:10px;">法币</span>` : "";
           return `
             <div class="status-item">
               <div class="s-top">
-                <span>${st.name || id}</span>
+                <span>${st.name || id}${fiatTag}</span>
                 <span><span class="dot ${dotClass}"></span> ${statusLabel[st.status] || st.status}</span>
               </div>
               <div class="panel-sub">国家: ${st.countryCount} | 规格: ${st.offerCount}</div>
