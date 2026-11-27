@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { COUNTRY_META, DATA_DIR, loadEnv, roundNum } from "./utils.mjs";
 import { fetchExchangeRates } from "./rates.mjs";
 import { collectTamana } from "./providers/tamana.mjs";
-import { collectStatero } from "./providers/statero.mjs";
 import { collectCryptoRefills } from "./providers/cryptorefills.mjs";
 import { collectCoinsbee } from "./providers/coinsbee.mjs";
 import { collectTokenstore } from "./providers/tokenstore.mjs";
@@ -14,7 +13,6 @@ import { collectBitrefillApi } from "./providers/bitrefill.mjs";
 
 const ALL_SITES = [
   { id: "tamana", name: "Tamana", mode: "api" },
-  { id: "statero", name: "Statero", mode: "api" },
   { id: "cryptorefills", name: "CryptoRefills", mode: "api" },
   { id: "coinsbee", name: "Coinsbee", mode: "api" },
   { id: "tokenstore", name: "Tokenstore", mode: "ssr" },
@@ -66,7 +64,6 @@ export async function runCollect() {
   console.log("2) 正在并发采集直连平台...");
   const tasks = [
     { id: "tamana", fn: () => collectTamana() },
-    { id: "statero", fn: () => collectStatero() },
     { id: "cryptorefills", fn: () => collectCryptoRefills(rates) },
     { id: "coinsbee", fn: () => collectCoinsbee() },
     { id: "tokenstore", fn: () => collectTokenstore() },
@@ -226,7 +223,7 @@ export async function runCollect() {
 
   await fs.writeFile(path.join(DATA_DIR, "latest.json"), JSON.stringify(output), "utf8");
 
-  console.log("\n=== 9 大平台采集结果汇总 ===");
+  console.log("\n=== 8 大平台采集结果汇总 ===");
   for (const s of ALL_SITES) {
     const st = siteStats[s.id];
     console.log(

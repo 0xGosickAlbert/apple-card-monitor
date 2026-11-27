@@ -16,7 +16,10 @@ function interpolateRatio(anchors, targetFv) {
     const b = anchors[i + 1];
     if (targetFv >= a.fv && targetFv <= b.fv) {
       if (b.fv === a.fv) return a.ratio;
-      const t = (targetFv - a.fv) / (b.fv - a.fv);
+      const invA = 1 / a.fv;
+      const invB = 1 / b.fv;
+      const invT = 1 / targetFv;
+      const t = (invT - invA) / (invB - invA);
       return a.ratio + t * (b.ratio - a.ratio);
     }
   }
@@ -58,12 +61,19 @@ export async function collectCoinsbee() {
 
         if (fixedItems.length > 0) {
           let queryItems;
-          if (fixedItems.length <= 5) {
+          if (fixedItems.length <= 8) {
             queryItems = fixedItems;
           } else {
-            const len = fixedItems.length;
-            const idxs = [...new Set([0, Math.floor(len / 3), Math.floor((2 * len) / 3), len - 1])];
-            queryItems = idxs.map((i) => fixedItems[i]);
+            const preferredVals = [100, 50, 25, 10, 200, 500, 1000, 5000, 15, 20, 30, 150, 250];
+            const picked = new Map();
+            for (const target of preferredVals) {
+              if (picked.size >= 6) break;
+              const match = fixedItems.find((it) => Math.abs(Number(it.value) - target) < 1e-6);
+              if (match) picked.set(match.id, match);
+            }
+            picked.set(fixedItems[0].id, fixedItems[0]);
+            picked.set(fixedItems[fixedItems.length - 1].id, fixedItems[fixedItems.length - 1]);
+            queryItems = [...picked.values()].slice(0, 8);
           }
 
           await mapLimit(
@@ -87,7 +97,7 @@ export async function collectCoinsbee() {
                 // 单项失败时跳过，交由邻近锚点估算
               }
             },
-            180
+            160
           );
           anchors.sort((a, b) => a.fv - b.fv);
         }

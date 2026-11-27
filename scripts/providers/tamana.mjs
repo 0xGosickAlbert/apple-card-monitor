@@ -3,6 +3,7 @@ import { fetchJson, isAppleBrandName, mapLimit, normalizeCountry, roundNum, slee
 const SITE_ID = "tamana";
 const SITE_NAME = "Tamana";
 const BASE_URL = "https://tamana-api.bamboocardportal.com/api/app/brands";
+const USDT_MULTIPLIER = 1.04; // Tamana 前端结账使用 USDT，固定乘以 rp = 1.04 系数
 
 /**
  * 采集 Tamana 全量 Apple 礼品卡报价
@@ -56,7 +57,7 @@ export async function collectTamana() {
           if (!(minFV > 0) || !(minPrice > 0) || !(rate > 0)) continue;
 
           if (p.faceValueType === "Ranged" && maxFV > minFV) {
-            const minPayUsd = minPrice / rate;
+            const minPayUsd = (minPrice / rate) * USDT_MULTIPLIER;
             const unitPayUsd = minPayUsd / minFV;
             offers.push({
               siteId: SITE_ID,
@@ -76,7 +77,7 @@ export async function collectTamana() {
               updatedAt: now,
             });
           } else {
-            const payUsd = minPrice / rate;
+            const payUsd = (minPrice / rate) * USDT_MULTIPLIER;
             offers.push({
               siteId: SITE_ID,
               siteName: SITE_NAME,

@@ -1,6 +1,6 @@
 # Apple 礼品卡全球实时比价与汇率浮动监控
 
-聚合监控 **9 大礼品卡平台**（Tamana、Statero、CryptoRefills、Coinsbee、Tokenstore、CoinGate、ByteTopup、Bitrefill、Kryptomate）的全球 Apple 系列礼品卡实时售价、区间自定义面值、真实国际汇率折扣/溢价比例，以及历史价格涨跌浮动。
+聚合监控 **8 大礼品卡平台**（Tamana、CryptoRefills、Coinsbee、Tokenstore、CoinGate、ByteTopup、Bitrefill、Kryptomate）的全球 Apple 系列礼品卡实时售价、区间自定义面值、真实国际汇率折扣/溢价比例，以及历史价格涨跌浮动。
 
 ---
 
@@ -10,7 +10,7 @@
 # 1. 云端/纯接口直连采集（同时合并本地浏览器缓存）
 npm run collect
 
-# 2. 全量采集（先通过 ego-browser 采集 Kryptomate & Bitrefill 网页，再汇总其余 7 站）
+# 2. 全量采集（先通过 ego-browser 采集 Kryptomate & Bitrefill 网页，再汇总其余 6 站）
 npm run collect:all
 
 # 3. 启动本地手机/电脑预览看板（默认 http://127.0.0.1:3456）

@@ -104,7 +104,12 @@ function parseBitrefillOffers(products, now) {
 
     for (const pkg of det.packages || []) {
       const fv = Number(pkg.amount ?? pkg.value);
-      const usd = Number(pkg.usdPrice ?? (pkg.prices?.USD ? pkg.prices.USD / 100 : 0));
+      const usd = Number(
+        (pkg.prices?.USDT ? pkg.prices.USDT / 1e6 : 0) ||
+        (pkg.prices?.USDC ? pkg.prices.USDC / 1e6 : 0) ||
+        pkg.usdPrice ||
+        (pkg.prices?.USD ? pkg.prices.USD / 100 : 0)
+      );
       if (!(fv > 0) || !(usd > 0)) continue;
 
       offers.push({
@@ -129,7 +134,12 @@ function parseBitrefillOffers(products, now) {
     if (r && Number(r.min) > 0 && Number(r.max) > Number(r.min)) {
       const minFV = Number(r.min);
       const maxFV = Number(r.max);
-      const minUsd = Number(r.minUsdPrice ?? (r.prices?.USD ? r.prices.USD / 100 : 0));
+      const minUsd = Number(
+        (r.prices?.USDT ? r.prices.USDT / 1e6 : 0) ||
+        (r.prices?.USDC ? r.prices.USDC / 1e6 : 0) ||
+        r.minUsdPrice ||
+        (r.prices?.USD ? r.prices.USD / 100 : 0)
+      );
       const unitPayUsd = minUsd > 0 ? minUsd / minFV : null;
       if (unitPayUsd > 0) {
         offers.push({

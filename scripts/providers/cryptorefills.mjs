@@ -51,7 +51,7 @@ export async function collectCryptoRefills(rates = {}) {
               const country = normalizeCountry(group.country_code || cc);
               const groupOut = Boolean(group.is_out_of_stock);
               const slug = String(family).toLowerCase().replace(/[^a-z0-9]+/g, "-");
-              const url = `https://www.cryptorefills.com/buy-${slug}-gift-card`;
+              const url = `https://www.cryptorefills.com/en/${slug}-crypto`;
 
               for (const p of group.products || []) {
                 const fvCur = String(
@@ -64,12 +64,25 @@ export async function collectCryptoRefills(rates = {}) {
                   const step = Number(p.range.step_size) || 1;
                   if (!(minFV > 0) || !(maxFV >= minFV)) continue;
 
-                  // CryptoRefills 动态金额如提供 coin_amount/default 则按其折算，否则按实时汇率基准 + 默认价差估算
+                  // 优先读取已有 coin_amount/default，否则调用官方动态报价接口获取真实 USDT 价格
                   let unitPayUsd = null;
                   if (Number(p.coin_amount) > 0 && Number(p.range.default) > 0) {
                     unitPayUsd = Number(p.coin_amount) / Number(p.range.default);
-                  } else if (rates[fvCur] > 0) {
-                    unitPayUsd = 1 / rates[fvCur];
+                  } else {
+                    const probeCandidates = [100, 50, 25, 10, 500, 1000];
+                    const probeFv =
+                      probeCandidates.find((v) => v >= minFV && v <= maxFV) ??
+                      Math.min(maxFV, Math.max(minFV, Math.ceil(minFV)));
+                    const priceUrl = `https://www.cryptorefills.com/api/products/price?brand_name=${encodeURIComponent(group.brand || family)}&country_code=${encodeURIComponent(country)}&face_value=${probeFv}&coin=USDT&promo_code=`;
+                    try {
+                      const pr = await fetchJson(priceUrl, {}, { timeoutMs: 12000 });
+                      const coinAmt = Number(pr?.coin_amount ?? pr?.original_coin_amount);
+                      if (coinAmt > 0) {
+                        unitPayUsd = coinAmt / probeFv;
+                      }
+                    } catch {
+                      // 拿不到真实 USDT 报价时放弃该区间条，绝不按 1:1 盲猜
+                    }
                   }
                   if (!(unitPayUsd > 0)) continue;
 

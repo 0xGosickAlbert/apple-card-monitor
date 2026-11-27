@@ -12,6 +12,13 @@ const API_BASE = "https://giftcards-api.coingate.com/api/v2";
  */
 export async function collectCoinGate(rates = {}) {
   const now = new Date().toISOString();
+  let cgUsdtRates = {};
+  try {
+    const merchantRates = await fetchJson("https://api.coingate.com/api/v2/rates/merchant", {}, { timeoutMs: 12000 });
+    cgUsdtRates = merchantRates?.USDT || {};
+  } catch (err) {
+    console.warn(`[CoinGate] 商家 USDT 汇率拉取失败，回退国际汇率: ${err.message}`);
+  }
   const baseData = await fetchJson(`${API_BASE}/gift-cards/brand_group_v2/apple?country=US`, {}, { timeoutMs: 15000 });
   const countries = (baseData?.countries || []).map((c) => String(c.value || "").toUpperCase()).filter(Boolean);
   if (!countries.length) countries.push("US");
@@ -105,10 +112,16 @@ export async function collectCoinGate(rates = {}) {
           const priceAmt = Number(gc.denomination?.price);
           if (!(priceAmt > 0)) continue;
 
-          const rate = priceCur === "USD" || priceCur === "USDT" ? 1 : rates[priceCur];
-          if (!(rate > 0)) continue;
-
-          const payUsd = priceAmt / rate;
+          const cgRate = Number(cgUsdtRates[priceCur]);
+          let payUsd = null;
+          if (cgRate > 0) {
+            payUsd = priceAmt / cgRate;
+          } else if (priceCur === "USD" || priceCur === "USDT") {
+            payUsd = priceAmt;
+          } else if (rates[priceCur] > 0) {
+            payUsd = priceAmt / rates[priceCur];
+          }
+          if (!(payUsd > 0)) continue;
           const rawStock = gc.stock_count;
           const stockCount =
             rawStock !== null && rawStock !== undefined && Number.isFinite(Number(rawStock))
