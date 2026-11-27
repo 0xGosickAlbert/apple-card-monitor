@@ -331,7 +331,9 @@ console.log("SYNC_BROWSER_OK", { km: out.kmCards.length, br: out.brProducts.leng
   };
 
   await fs.writeFile(CACHE_FILE, JSON.stringify(nextCache), "utf8");
-  await runCollect();
+  if (!process.argv.includes("--only-cache")) {
+    await runCollect();
+  }
 }
 
 main().catch((err) => {

@@ -39,3 +39,8 @@ npm start
    - 前往 **Actions** 页面点击 **Run workflow** 即可立即生成并发布公网网址（`https://<你的用户名>.github.io/<你的仓库名>/`），此后每 15 分钟自动更新一次！
 
 > **关于 Kryptomate / Bitrefill 网页同步**：由于部分站点部署了 Cloudflare 人机盾，可在本地电脑运行 `npm run sync:browser` 并 `git push`，云端定时任务会自动保留并持续比对您的最新快照数据。
+>
+> **macOS 本机每 15 分钟自动同步**：仓库提供 [auto-sync-browser.sh](scripts/auto-sync-browser.sh)，配合 macOS `launchd` 服务 `com.gosick.apple-card-browser-sync` 每 15 分钟自动同步并推送 `docs/data/browser-cache.json`：
+> - 查看状态：`launchctl print gui/$(id -u)/com.gosick.apple-card-browser-sync`
+> - 查看日志：`cat /tmp/apple-card-browser-sync.log /tmp/apple-card-browser-sync.err.log`
+> - 停用任务：`launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.gosick.apple-card-browser-sync.plist`

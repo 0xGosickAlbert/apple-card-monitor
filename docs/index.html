@@ -328,6 +328,7 @@
     .badge-stock-low { background: var(--amber-soft); color: var(--amber); border: 1px solid #fde68a; }
     .badge-fiat { background: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; }
     .badge-fee { background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; }
+    .badge-stale { background: var(--amber-soft); color: var(--amber); border: 1px solid #fde68a; }
     .badge-up { background: var(--red-soft); color: var(--red); }
     .badge-down { background: var(--green-soft); color: var(--green); }
 
@@ -823,6 +824,8 @@
               : o.siteId === "keys4coins"
                 ? `<span class="badge badge-fee">主流加密币</span>`
                 : "";
+          const staleLabel = getStaleSnapshotLabel(o.siteId, o.updatedAt);
+          const staleBadge = staleLabel ? `<span class="badge badge-stale">⚠️ 旧快照（${staleLabel}）</span>` : "";
           const saveTip = saveVsSecond > 0.005 ? `<span style="color:var(--green);font-weight:600;">比第2名省 ${fmtMoney(saveVsSecond)}</span>` : "";
           const unitLabel = isFiat
             ? (displayCur === "USD" ? "USD · 法币" : "CNY · 法币")
@@ -844,6 +847,7 @@
                   ${typeBadge}
                   ${fiatBadge}
                   ${feeBadge}
+                  ${staleBadge}
                   ${stockBadge}
                 </div>
                 <div class="detail-line">
@@ -866,6 +870,18 @@
         .join("");
     }
 
+    function getStaleSnapshotLabel(siteId, updatedAt) {
+      const st = appData?.sites?.[siteId];
+      if (!st || (st.status !== "browser_cache" && st.status !== "stale_cache")) return "";
+      const ts = new Date(updatedAt || st.updatedAt || 0).getTime();
+      if (!ts) return "";
+      const ageMs = Date.now() - ts;
+      if (ageMs < 60 * 60 * 1000) return "";
+      return ageMs >= 24 * 3600 * 1000
+        ? `${Math.floor(ageMs / (24 * 3600 * 1000))}天前`
+        : `${Math.floor(ageMs / (3600 * 1000))}小时前`;
+    }
+
     function renderSiteStatuses() {
       const grid = document.getElementById("statusGrid");
       const sites = appData?.sites || {};
@@ -886,12 +902,14 @@
       grid.innerHTML = entries
         .map(([id, st]) => {
           const ok = st.offerCount > 0;
-          const dotClass = ok ? (st.status === "stale_cache" ? "dot-warn" : "dot-ok") : "dot-err";
+          const staleLabel = getStaleSnapshotLabel(id, st.updatedAt);
+          const dotClass = ok ? (st.status === "stale_cache" || staleLabel ? "dot-warn" : "dot-ok") : "dot-err";
           const fiatTag = st.paymentType === "fiat" ? `<span class="badge badge-fiat" style="margin-left:4px;font-size:10px;">法币</span>` : "";
+          const staleTag = staleLabel ? `<span class="badge badge-stale" style="margin-left:4px;font-size:10px;">⚠️ 旧快照（${staleLabel}）</span>` : "";
           return `
             <div class="status-item">
               <div class="s-top">
-                <span>${st.name || id}${fiatTag}</span>
+                <span>${st.name || id}${fiatTag}${staleTag}</span>
                 <span><span class="dot ${dotClass}"></span> ${statusLabel[st.status] || st.status}</span>
               </div>
               <div class="panel-sub">国家: ${st.countryCount} | 规格: ${st.offerCount}</div>
