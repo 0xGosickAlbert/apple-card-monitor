@@ -1,4 +1,4 @@
-import { fetchJson, isAppleBrandName, normalizeCountry, roundNum } from "../utils.mjs";
+import { detectBrandSeries, fetchJson, isExcludedCountry, normalizeCountry, roundNum } from "../utils.mjs";
 
 const SITE_ID = "bitrefill";
 const SITE_NAME = "Bitrefill";
@@ -23,15 +23,16 @@ export async function collectBitrefillApi(rates = {}) {
 
   try {
     const itemMap = new Map();
-    for (const q of ["apple", "itunes", "app store"]) {
+    for (const q of ["apple", "itunes", "app store", "playstation", "xbox"]) {
       const searchRes = await fetchJson(
         `${API_BASE}/products?q=${encodeURIComponent(q)}&include_test_products=false&limit=100`,
         { headers },
         { timeoutMs: 15000 }
       );
       for (const item of searchRes?.data || []) {
-        if (!isAppleBrandName(item.name || item.base_name)) continue;
-        if (!itemMap.has(item.id)) itemMap.set(item.id, item);
+        const brandSeries = detectBrandSeries(item.name || item.base_name);
+        if (!brandSeries) continue;
+        if (!itemMap.has(item.id)) itemMap.set(item.id, { ...item, brandSeries });
       }
     }
     const items = [...itemMap.values()];
@@ -46,6 +47,7 @@ export async function collectBitrefillApi(rates = {}) {
         const p = det?.data;
         if (!p) continue;
         const country = normalizeCountry(p.country_code || p.country, p.name);
+        if (isExcludedCountry(country, item.brandSeries)) continue;
         const currency = String(p.currency || "USD").toUpperCase();
         const rate = rates[currency] || 1;
         const url = `https://www.bitrefill.com/${country.toLowerCase()}/en/gift-cards/${p.id}/`;
@@ -57,6 +59,7 @@ export async function collectBitrefillApi(rates = {}) {
           offers.push({
             siteId: SITE_ID,
             siteName: SITE_NAME,
+            brand: item.brandSeries,
             country,
             currency,
             type: "fixed",
@@ -75,6 +78,7 @@ export async function collectBitrefillApi(rates = {}) {
           offers.push({
             siteId: SITE_ID,
             siteName: SITE_NAME,
+            brand: item.brandSeries,
             country,
             currency,
             type: "range",

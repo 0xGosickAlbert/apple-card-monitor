@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { COUNTRY_META, DATA_DIR, EXCLUDED_COUNTRIES, loadEnv, roundNum } from "./utils.mjs";
+import { BRAND_SERIES, COUNTRY_META, DATA_DIR, isExcludedCountry, loadEnv, roundNum } from "./utils.mjs";
 import { fetchExchangeRates } from "./rates.mjs";
 import { collectTamana } from "./providers/tamana.mjs";
 import { collectCryptoRefills } from "./providers/cryptorefills.mjs";
@@ -43,7 +43,19 @@ async function readJsonIfExists(filePath) {
 
 function offerKey(o) {
   const fvPart = o.type === "range" ? `range:${o.minFaceValue}-${o.maxFaceValue}` : `fixed:${o.faceValue}`;
-  return `${o.siteId}|${o.country}|${o.currency}|${fvPart}`;
+  return `${o.brand || "apple"}|${o.siteId}|${o.country}|${o.currency}|${fvPart}`;
+}
+
+function summarizeByBrand(offers) {
+  const byBrand = {};
+  for (const b of BRAND_SERIES) {
+    const bOffers = offers.filter((o) => (o.brand || "apple") === b.id);
+    byBrand[b.id] = {
+      offerCount: bOffers.length,
+      countryCount: new Set(bOffers.map((o) => o.country)).size,
+    };
+  }
+  return byBrand;
 }
 
 function effectiveUnitUsd(o) {
@@ -125,7 +137,9 @@ export async function runCollect() {
       }
     }
 
-    offers = offers.filter((o) => !EXCLUDED_COUNTRIES.has(o.country));
+    offers = offers
+      .map((o) => ({ ...o, brand: o.brand || "apple" }))
+      .filter((o) => !isExcludedCountry(o.country, o.brand));
     mergedOffers.push(...offers);
     const countriesCount = new Set(offers.map((o) => o.country)).size;
     const siteMeta = SITE_META_MAP.get(r.id);
@@ -136,6 +150,7 @@ export async function runCollect() {
       error: r.error,
       offerCount: offers.length,
       countryCount: countriesCount,
+      byBrand: summarizeByBrand(offers),
       updatedAt,
       elapsedMs: r.ms,
     };
@@ -146,7 +161,9 @@ export async function runCollect() {
   const kmOffers = (kmCache?.offers?.length
     ? kmCache.offers
     : (prevLatest?.offers || []).filter((o) => o.siteId === "kryptomate")
-  ).filter((o) => !EXCLUDED_COUNTRIES.has(o.country));
+  )
+    .map((o) => ({ ...o, brand: o.brand || "apple" }))
+    .filter((o) => !isExcludedCountry(o.country, o.brand));
   mergedOffers.push(...kmOffers);
   siteStats.kryptomate = {
     name: "Kryptomate",
@@ -155,6 +172,7 @@ export async function runCollect() {
     error: null,
     offerCount: kmOffers.length,
     countryCount: new Set(kmOffers.map((o) => o.country)).size,
+    byBrand: summarizeByBrand(kmOffers),
     updatedAt: kmCache?.updatedAt || prevLatest?.sites?.kryptomate?.updatedAt || null,
     elapsedMs: 0,
   };
@@ -162,7 +180,8 @@ export async function runCollect() {
   // 过滤无效报价并计算真实汇率比例 & 历史价格浮动
   const finalOffers = [];
   for (const o of mergedOffers) {
-    if (EXCLUDED_COUNTRIES.has(o.country)) continue;
+    const brand = o.brand || "apple";
+    if (isExcludedCountry(o.country, brand)) continue;
     const rate = o.currency === "USD" || o.currency === "USDT" ? 1 : rates[o.currency];
     if (!(rate > 0)) continue;
 
@@ -207,6 +226,7 @@ export async function runCollect() {
 
     finalOffers.push({
       ...o,
+      brand,
       paymentType,
       inStock,
       stockCount,
@@ -235,9 +255,23 @@ export async function runCollect() {
     };
   }
 
+  const brands = {};
+  for (const b of BRAND_SERIES) {
+    const bOffers = finalOffers.filter((o) => o.brand === b.id);
+    brands[b.id] = {
+      id: b.id,
+      name: b.name,
+      icon: b.icon,
+      offerCount: bOffers.length,
+      countryCount: new Set(bOffers.map((o) => o.country)).size,
+      countries: [...new Set(bOffers.map((o) => o.country))].sort(),
+    };
+  }
+
   const output = {
     generatedAt: new Date().toISOString(),
     rateInfo,
+    brands,
     countries,
     sites: siteStats,
     offers: finalOffers,
@@ -248,10 +282,15 @@ export async function runCollect() {
   console.log("\n=== 12 大平台采集结果汇总 ===");
   for (const s of ALL_SITES) {
     const st = siteStats[s.id];
+    const b = st.byBrand || {};
+    const detail = `A:${b.apple?.offerCount || 0} P:${b.playstation?.offerCount || 0} X:${b.xbox?.offerCount || 0}`;
     console.log(
-      `  - ${st.name.padEnd(14)} | 状态: ${String(st.status).padEnd(18)} | 国家: ${String(st.countryCount).padStart(2)} | 规格数: ${String(st.offerCount).padStart(4)} | 耗时: ${st.elapsedMs}ms`
+      `  - ${st.name.padEnd(14)} | 状态: ${String(st.status).padEnd(14)} | 国家: ${String(st.countryCount).padStart(2)} | 规格数: ${String(st.offerCount).padStart(4)} (${detail}) | 耗时: ${st.elapsedMs}ms`
     );
   }
+  console.log(
+    `分系列汇总 -> Apple: ${brands.apple.countryCount}国/${brands.apple.offerCount}条 | PlayStation: ${brands.playstation.countryCount}国/${brands.playstation.offerCount}条 | Xbox: ${brands.xbox.countryCount}国/${brands.xbox.offerCount}条`
+  );
   console.log(`总计有效报价: ${finalOffers.length} 条 | 覆盖国家/地区: ${Object.keys(countries).length} 个\n`);
   return output;
 }

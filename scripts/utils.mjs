@@ -227,6 +227,38 @@ export const COUNTRY_META = {
   CO: { name: "哥伦比亚", en: "Colombia", flag: "🇨🇴", currency: "COP" },
   CN: { name: "中国大陆", en: "China", flag: "🇨🇳", currency: "CNY" },
   RU: { name: "俄罗斯", en: "Russia", flag: "🇷🇺", currency: "RUB" },
+  UA: { name: "乌克兰", en: "Ukraine", flag: "🇺🇦", currency: "UAH" },
+  IL: { name: "以色列", en: "Israel", flag: "🇮🇱", currency: "ILS" },
+  PE: { name: "秘鲁", en: "Peru", flag: "🇵🇪", currency: "PEN" },
+  SK: { name: "斯洛伐克", en: "Slovakia", flag: "🇸🇰", currency: "EUR" },
+  HR: { name: "克罗地亚", en: "Croatia", flag: "🇭🇷", currency: "EUR" },
+  BG: { name: "保加利亚", en: "Bulgaria", flag: "🇧🇬", currency: "BGN" },
+  SI: { name: "斯洛文尼亚", en: "Slovenia", flag: "🇸🇮", currency: "EUR" },
+  LT: { name: "立陶宛", en: "Lithuania", flag: "🇱🇹", currency: "EUR" },
+  LV: { name: "拉脱维亚", en: "Latvia", flag: "🇱🇻", currency: "EUR" },
+  EE: { name: "爱沙尼亚", en: "Estonia", flag: "🇪🇪", currency: "EUR" },
+  CY: { name: "塞浦路斯", en: "Cyprus", flag: "🇨🇾", currency: "EUR" },
+  MT: { name: "马耳他", en: "Malta", flag: "🇲🇹", currency: "EUR" },
+  IS: { name: "冰岛", en: "Iceland", flag: "🇮🇸", currency: "ISK" },
+  LB: { name: "黎巴嫩", en: "Lebanon", flag: "🇱🇧", currency: "USD" },
+  JO: { name: "约旦", en: "Jordan", flag: "🇯🇴", currency: "JOD" },
+  MA: { name: "摩洛哥", en: "Morocco", flag: "🇲🇦", currency: "MAD" },
+  TN: { name: "突尼斯", en: "Tunisia", flag: "🇹🇳", currency: "TND" },
+  PK: { name: "巴基斯坦", en: "Pakistan", flag: "🇵🇰", currency: "PKR" },
+  UY: { name: "乌拉圭", en: "Uruguay", flag: "🇺🇾", currency: "UYU" },
+  EC: { name: "厄瓜多尔", en: "Ecuador", flag: "🇪🇨", currency: "USD" },
+  CR: { name: "哥斯达黎加", en: "Costa Rica", flag: "🇨🇷", currency: "CRC" },
+  PA: { name: "巴拿马", en: "Panama", flag: "🇵🇦", currency: "USD" },
+  PR: { name: "波多黎各", en: "Puerto Rico", flag: "🇵🇷", currency: "USD" },
+  SV: { name: "萨尔瓦多", en: "El Salvador", flag: "🇸🇻", currency: "USD" },
+  GT: { name: "危地马拉", en: "Guatemala", flag: "🇬🇹", currency: "GTQ" },
+  HN: { name: "洪都拉斯", en: "Honduras", flag: "🇭🇳", currency: "HNL" },
+  NI: { name: "尼加拉瓜", en: "Nicaragua", flag: "🇳🇮", currency: "NIO" },
+  PY: { name: "巴拉圭", en: "Paraguay", flag: "🇵🇾", currency: "PYG" },
+  BO: { name: "玻利维亚", en: "Bolivia", flag: "🇧🇴", currency: "BOB" },
+  RS: { name: "塞尔维亚", en: "Serbia", flag: "🇷🇸", currency: "RSD" },
+  KZ: { name: "哈萨克斯坦", en: "Kazakhstan", flag: "🇰🇿", currency: "KZT" },
+  DM: { name: "多米尼克", en: "Dominica", flag: "🇩🇲", currency: "XCD" },
   EU: { name: "欧元区", en: "Europe", flag: "🇪🇺", currency: "EUR" },
   WW: { name: "全球", en: "Global", flag: "🌐", currency: "USD" },
 };
@@ -296,11 +328,57 @@ const NAME_TO_CODE = {
   oman: "OM",
   china: "CN",
   russia: "RU",
+  ukraine: "UA",
+  israel: "IL",
+  peru: "PE",
+  slovakia: "SK",
+  croatia: "HR",
+  bulgaria: "BG",
+  slovenia: "SI",
+  lithuania: "LT",
+  latvia: "LV",
+  estonia: "EE",
+  cyprus: "CY",
+  malta: "MT",
+  iceland: "IS",
+  lebanon: "LB",
+  jordan: "JO",
+  morocco: "MA",
+  tunisia: "TN",
+  pakistan: "PK",
+  uruguay: "UY",
+  ecuador: "EC",
+  "costa rica": "CR",
+  panama: "PA",
+  "puerto rico": "PR",
+  "el salvador": "SV",
+  guatemala: "GT",
+  honduras: "HN",
+  nicaragua: "NI",
+  paraguay: "PY",
+  bolivia: "BO",
+  serbia: "RS",
+  kazakhstan: "KZ",
+  dominica: "DM",
   europe: "EU",
   global: "WW",
 };
 
+export const BRAND_SERIES = [
+  { id: "apple", name: "Apple 系列", icon: "🍎" },
+  { id: "playstation", name: "PlayStation 系列", icon: "🎮" },
+  { id: "xbox", name: "Xbox 系列", icon: "❎" },
+];
+
 export const EXCLUDED_COUNTRIES = new Set(["KR", "MY", "HK", "DM"]);
+
+/**
+ * 判断该国家在指定品牌系列下是否需要排除（PlayStation 保留全部国家）
+ */
+export function isExcludedCountry(country, brand = "apple") {
+  if (brand === "playstation") return false;
+  return EXCLUDED_COUNTRIES.has(country);
+}
 
 /**
  * 归一化国家代码（ISO 3166-1 alpha-2 大写）
@@ -332,6 +410,42 @@ export function isAppleBrandName(name) {
     /\b(applebee|applebees|apple\s*&\s*eve|pineapple|snapple|big\s*apple|red\s*apple|green\s*apple|bad\s*apple|macbook\s*repair|airpods|iphone|ipad|macbook|imac|apple\s*watch|watch\s*(se|series|ultra)|pencil|airtag|homepod|vision\s*pro|magsafe|earpods|magic\s*(mouse|keyboard|trackpad)|studio\s*display|mac\s*(mini|studio|pro)|beats|charger|adapter|cable|aluminium|aluminum|sport\s*band|gps|40mm|42mm|44mm|46mm|128gb|256gb|512gb|1tb|usb-c)\b|애플펜슬|主動消噪|클라우드/i;
   if (excluded.test(s)) return false;
   return /\b(apple|itunes|app\s*store|appstore)\b|苹果/i.test(s);
+}
+
+/**
+ * 识别 PlayStation / PSN 储值礼品卡（严格排除游戏本体、点数、PS Plus 订阅及硬件）
+ */
+export function isPlayStationBrandName(name) {
+  if (!name) return false;
+  const s = String(name).trim();
+  const excluded =
+    /\b(plus|now|essential|extra|deluxe|premium|subscription|membership|ps\s*plus|console|dualsense|controller|headset|vr\d?|portal|remote|camera|charger|cable|points|coins|vbucks|v-bucks|fifa|fc\s*2\d|cod|call\s*of\s*duty|apex|fortnite|minecraft|roblox|gta|edition|bundle|dlc|season|pass|\d+\s*(month|months|day|days|week|weeks|year|years|mo|yr))\b/i;
+  if (excluded.test(s)) return false;
+  return /^(?:sony\s+)?(?:playstation|psn)\b/i.test(s) ||
+    /\b(?:playstation\s+(?:store|network|gift\s*card|wallet|card|top[- ]?up|voucher)|psn\s+(?:gift\s*)?(?:card|voucher|top[- ]?up|wallet))\b/i.test(s);
+}
+
+/**
+ * 识别 Xbox / Xbox Live 储值礼品卡（严格排除 Game Pass 订阅月卡、游戏本体、内购点数及硬件）
+ */
+export function isXboxBrandName(name) {
+  if (!name) return false;
+  const s = String(name).trim();
+  const excluded =
+    /\b(game\s*pass|gamepass|core|gold|ultimate|ea\s*play|subscription|membership|console|series\s*[xs]|one\s*[xs]|controller|headset|wireless|charger|cable|coins|points|vbucks|v-bucks|fifa|fc\s*2\d|apex|cod|call\s*of\s*duty|fortnite|minecraft|roblox|gta|edition|dlc|bundle|branded|season|pass|\d+\s*(month|months|day|days|week|weeks|year|years|mo|yr))\b/i;
+  if (excluded.test(s)) return false;
+  return /^(?:microsoft\s+)?(?:gc-)?xbox\b/i.test(s) ||
+    /\bxbox\s+(?:live\s+)?(?:gift\s*card|card|store|wallet|voucher|top[- ]?up)\b/i.test(s);
+}
+
+/**
+ * 统一判断商品名称所属礼品卡系列（apple / playstation / xbox），非目标礼品卡返回 null
+ */
+export function detectBrandSeries(name) {
+  if (isAppleBrandName(name)) return "apple";
+  if (isPlayStationBrandName(name)) return "playstation";
+  if (isXboxBrandName(name)) return "xbox";
+  return null;
 }
 
 export function roundNum(n, digits = 4) {

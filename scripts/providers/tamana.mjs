@@ -1,4 +1,4 @@
-import { fetchJson, isAppleBrandName, mapLimit, normalizeCountry, roundNum, sleep } from "../utils.mjs";
+import { detectBrandSeries, fetchJson, isExcludedCountry, mapLimit, normalizeCountry, roundNum, sleep } from "../utils.mjs";
 
 const SITE_ID = "tamana";
 const SITE_NAME = "Tamana";
@@ -6,12 +6,12 @@ const BASE_URL = "https://tamana-api.bamboocardportal.com/api/app/brands";
 const USDT_MULTIPLIER = 1.04; // Tamana 前端结账使用 USDT，固定乘以 rp = 1.04 系数
 
 /**
- * 采集 Tamana 全量 Apple 礼品卡报价
+ * 采集 Tamana 全量 Apple / PlayStation / Xbox 礼品卡报价
  * 注意：分页必须串行间隔请求，避免并发触发空响应
  */
 export async function collectTamana() {
   const now = new Date().toISOString();
-  const appleBrands = [];
+  const matchedBrands = [];
   const pageSize = 1000;
   let skip = 0;
   let totalCount = Infinity;
@@ -23,8 +23,9 @@ export async function collectTamana() {
     if (!items.length) break;
 
     for (const item of items) {
-      if (isAppleBrandName(item.name)) {
-        appleBrands.push(item);
+      const brandSeries = detectBrandSeries(item.name);
+      if (brandSeries) {
+        matchedBrands.push({ ...item, brandSeries });
       }
     }
     skip += items.length;
@@ -33,16 +34,17 @@ export async function collectTamana() {
 
   const offers = [];
   await mapLimit(
-    appleBrands,
+    matchedBrands,
     3,
-    async (brand) => {
+    async (brandItem) => {
       try {
-        const detail = await fetchJson(`${BASE_URL}/${brand.id}`, {}, { timeoutMs: 15000 });
-        const country = normalizeCountry(brand.countryCode, brand.name);
+        const detail = await fetchJson(`${BASE_URL}/${brandItem.id}`, {}, { timeoutMs: 15000 });
+        const country = normalizeCountry(brandItem.countryCode, brandItem.name);
+        if (isExcludedCountry(country, brandItem.brandSeries)) return;
         const products = detail?.products || [];
 
         for (const p of products) {
-          const currency = String(p.currencyCode || brand.currencyCode || "USD").toUpperCase();
+          const currency = String(p.currencyCode || brandItem.currencyCode || "USD").toUpperCase();
           const rate = Number(p.defaultCurrencyRate) || 1; // 1 USD = rate * currency
           const minFV = Number(p.minFaceValue);
           const maxFV = Number(p.maxFaceValue);
@@ -62,6 +64,7 @@ export async function collectTamana() {
             offers.push({
               siteId: SITE_ID,
               siteName: SITE_NAME,
+              brand: brandItem.brandSeries,
               country,
               currency,
               type: "range",
@@ -81,6 +84,7 @@ export async function collectTamana() {
             offers.push({
               siteId: SITE_ID,
               siteName: SITE_NAME,
+              brand: brandItem.brandSeries,
               country,
               currency,
               type: "fixed",
@@ -98,7 +102,7 @@ export async function collectTamana() {
           }
         }
       } catch (err) {
-        console.warn(`[Tamana] 品牌 ${brand.name} 详情拉取失败: ${err.message}`);
+        console.warn(`[Tamana] 品牌 ${brandItem.name} 详情拉取失败: ${err.message}`);
       }
     },
     220

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { DATA_DIR, EXCLUDED_COUNTRIES, isAppleBrandName, normalizeCountry, roundNum } from "./utils.mjs";
+import { DATA_DIR, detectBrandSeries, isExcludedCountry, normalizeCountry, roundNum } from "./utils.mjs";
 import { runCollect } from "./collect.mjs";
 
 const CACHE_FILE = path.join(DATA_DIR, "browser-cache.json");
@@ -33,13 +33,14 @@ function runEgoBrowserScript(scriptCode) {
 function parseKryptomateOffers(giftCards, now) {
   const offers = [];
   for (const gc of giftCards || []) {
-    if (!isAppleBrandName(gc.name)) continue;
+    const brand = detectBrandSeries(gc.name);
+    if (!brand) continue;
     const isActive = String(gc.status || "ACTIVE").toUpperCase() === "ACTIVE";
     const country = normalizeCountry(gc.countryCode || gc.countries?.[0], gc.name);
-    if (EXCLUDED_COUNTRIES.has(country)) continue;
+    if (isExcludedCountry(country, brand)) continue;
     const url = gc.slug
       ? `https://kryptomate.com/zh/gift-cards/${gc.slug}`
-      : "https://kryptomate.com/zh/gift-cards?query=Apple";
+      : "https://kryptomate.com/zh/gift-cards";
 
     for (const item of gc.items || []) {
       const currency = String(item.currencyCode || gc.currency || "USD").toUpperCase();
@@ -56,6 +57,7 @@ function parseKryptomateOffers(giftCards, now) {
         offers.push({
           siteId: "kryptomate",
           siteName: "Kryptomate",
+          brand,
           country,
           currency,
           type: "range",
@@ -75,6 +77,7 @@ function parseKryptomateOffers(giftCards, now) {
         offers.push({
           siteId: "kryptomate",
           siteName: "Kryptomate",
+          brand,
           country,
           currency,
           type: "fixed",
@@ -97,9 +100,11 @@ function parseKryptomateOffers(giftCards, now) {
 function parseBitrefillOffers(products, now) {
   const offers = [];
   for (const det of products || []) {
-    if (!det || !isAppleBrandName(det.name || det.baseName)) continue;
+    if (!det) continue;
+    const brand = detectBrandSeries(det.name || det.baseName);
+    if (!brand) continue;
     const country = normalizeCountry(det.countryCode || det.countries?.[0], det.name);
-    if (EXCLUDED_COUNTRIES.has(country)) continue;
+    if (isExcludedCountry(country, brand)) continue;
     const currency = String(det.currency || "USD").toUpperCase();
     const inStock = !det.outOfStock;
     const url = `https://www.bitrefill.com/${country.toLowerCase()}/en/gift-cards/${det.slug}/`;
@@ -117,6 +122,7 @@ function parseBitrefillOffers(products, now) {
       offers.push({
         siteId: "bitrefill",
         siteName: "Bitrefill",
+        brand,
         country,
         currency,
         type: "fixed",
@@ -147,6 +153,7 @@ function parseBitrefillOffers(products, now) {
         offers.push({
           siteId: "bitrefill",
           siteName: "Bitrefill",
+          brand,
           country,
           currency,
           type: "range",
@@ -167,13 +174,13 @@ function parseBitrefillOffers(products, now) {
 }
 
 async function main() {
-  console.log("正在启动 ego-browser 采集 Kryptomate 与 Bitrefill 全球 Apple 礼品卡...");
+  console.log("正在启动 ego-browser 采集 Kryptomate 与 Bitrefill 全球 Apple / PlayStation / Xbox 礼品卡...");
   await fs.rm(TMP_RESULT_FILE, { force: true }).catch(() => {});
 
   const browserScript = `
 const fs = await import("node:fs/promises");
 const TMP_FILE = ${JSON.stringify(TMP_RESULT_FILE)};
-const task = await taskSpace("apple-monitor-sync");
+const task = await taskSpace("apple-monitor-sync-" + Date.now());
 const page = task.page("p1");
 const out = { handoff: null, kmCards: [], brProducts: [], errors: [] };
 
@@ -196,7 +203,7 @@ try {
     process.exit(0);
   }
   const kmMap = new Map();
-  for (const kw of ["Apple", "iTunes", "App Store"]) {
+  for (const kw of ["Apple", "iTunes", "App Store", "PlayStation", "PSN", "Xbox"]) {
     const kmRes = await page.fetch("https://cryptomate.store/api/v2/home_search?key=" + encodeURIComponent(kw), { timeout: 15000 });
     if (kmRes.ok) {
       const kmJson = JSON.parse(kmRes.body);
@@ -233,7 +240,7 @@ try {
     process.exit(0);
   } else {
     const slugSet = new Set();
-    for (const q of ["apple", "itunes", "app store"]) {
+    for (const q of ["apple", "itunes", "app store", "playstation", "psn", "xbox"]) {
       const omniRes = await brPage.fetch("https://www.bitrefill.com/api/omni?q=" + encodeURIComponent(q) + "&limit=100", { timeout: 15000 });
       if (omniRes.ok) {
         const oj = JSON.parse(omniRes.body);
@@ -241,15 +248,24 @@ try {
           const bn = String(p.baseName || "").toLowerCase();
           const nm = String(p.name || "").toLowerCase();
           const id = String(p._id || "").toLowerCase();
+          const isExcludedItem = /(game[- ]?pass|gamepass|ps[- ]?plus|playstation[- ]?plus|playstation[- ]?now|ea[- ]?play|ultimate|month|days|points|coins)/i.test(id + " " + nm);
+          if (isExcludedItem) continue;
           if (
             bn === "apple" ||
             bn.includes("itunes") ||
             bn.includes("app store") ||
+            bn.includes("playstation") ||
+            bn.includes("xbox") ||
             nm.includes("itunes") ||
             nm.includes("app store") ||
+            nm.includes("playstation") ||
+            nm.includes("xbox") ||
             id.startsWith("apple-") ||
             id.startsWith("itunes-") ||
-            id.startsWith("app-store-")
+            id.startsWith("app-store-") ||
+            id.startsWith("playstation-") ||
+            id.startsWith("psn-") ||
+            id.startsWith("xbox-")
           ) {
             slugSet.add(p._id);
           }
@@ -259,8 +275,8 @@ try {
       }
     }
     const slugs = [...slugSet];
-    for (let i = 0; i < slugs.length; i += 5) {
-      const batch = slugs.slice(i, i + 5);
+    for (let i = 0; i < slugs.length; i += 6) {
+      const batch = slugs.slice(i, i + 6);
       const dets = await Promise.all(
         batch.map(async (slug) => {
           try {

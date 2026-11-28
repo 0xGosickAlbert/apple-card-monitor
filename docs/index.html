@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Apple 礼品卡全球实时比价与汇率浮动监控</title>
+  <title>Apple / PlayStation / Xbox 礼品卡全球实时比价与汇率浮动监控</title>
   <style>
     :root {
       --bg: #f4f5f7;
@@ -158,6 +158,52 @@
     .panel-sub {
       font-size: 12px;
       color: var(--muted);
+    }
+
+    /* 品牌系列筛选分组 */
+    .brand-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .brand-tab {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 3px;
+      padding: 11px 13px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card);
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+      color: var(--text);
+    }
+    .brand-tab:hover {
+      border-color: #93c5fd;
+    }
+    .brand-tab.active {
+      background: linear-gradient(135deg, #0071e3 0%, #2563eb 100%);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(0, 113, 227, 0.22);
+    }
+    .brand-tab .b-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .brand-tab .b-meta {
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+    .brand-tab.active .b-meta {
+      color: rgba(255, 255, 255, 0.88);
     }
 
     /* 搜索框 */
@@ -433,6 +479,9 @@
         padding-top: 8px;
       }
       .brand h1 { font-size: 15.5px; }
+      .brand-tabs { gap: 7px; }
+      .brand-tab { padding: 9px 10px; }
+      .brand-tab .b-title { font-size: 13px; }
     }
     @media (max-width: 600px) {
       .topbar-inner { flex-wrap: wrap; }
@@ -444,7 +493,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
-        <h1>🍎 Apple 礼品卡实时比价</h1>
+        <h1>🎁 礼品卡全球实时比价</h1>
         <div class="meta" id="metaLine">正在加载最新全网行情...</div>
       </div>
       <div class="topbar-actions">
@@ -459,6 +508,9 @@
   </header>
 
   <main class="container">
+    <!-- 品牌系列分组筛选 -->
+    <section class="brand-tabs" id="brandTabs" role="tablist" aria-label="礼品卡系列"></section>
+
     <!-- 国家选择 -->
     <section class="panel">
       <div class="panel-header">
@@ -531,9 +583,19 @@
   </main>
 
   <script>
+    const BRAND_META = [
+      { id: "apple", name: "Apple 系列", icon: "🍎" },
+      { id: "playstation", name: "PlayStation 系列", icon: "🎮" },
+      { id: "xbox", name: "Xbox 系列", icon: "❎" },
+    ];
+
     let appData = null;
     let displayCur = localStorage.getItem("apple_disp_cur") || "USD";
-    let selectedCountry = localStorage.getItem("apple_country") || "US";
+    let selectedBrand = localStorage.getItem("monitor_brand") || "apple";
+    if (!BRAND_META.some((b) => b.id === selectedBrand)) selectedBrand = "apple";
+    let selectedCountry =
+      localStorage.getItem("monitor_country_" + selectedBrand) ||
+      (selectedBrand === "apple" ? localStorage.getItem("apple_country") || "US" : "US");
     let selectedCurrency = "";
     let selectedFaceValue = null;
 
@@ -577,13 +639,52 @@
       return [...base.filter((o) => !extraSites.has(o.siteId)), ...extra];
     }
 
+    function getBrandOffers(brand = selectedBrand) {
+      return getAllOffers().filter((o) => (o.brand || "apple") === brand);
+    }
+
+    function renderBrands() {
+      const el = document.getElementById("brandTabs");
+      if (!el) return;
+      const all = getAllOffers();
+      el.innerHTML = BRAND_META.map((b) => {
+        const list = all.filter((o) => (o.brand || "apple") === b.id);
+        const cCount = new Set(list.map((o) => o.country)).size;
+        const active = b.id === selectedBrand ? "active" : "";
+        return `
+          <button class="brand-tab ${active}" role="tab" aria-selected="${b.id === selectedBrand}" onclick="selectBrand('${b.id}')">
+            <span class="b-title">${b.icon} ${b.name}</span>
+            <span class="b-meta">${cCount} 国 · ${list.length} 条报价</span>
+          </button>
+        `;
+      }).join("");
+    }
+
+    function selectBrand(brand) {
+      if (selectedBrand === brand) return;
+      selectedBrand = brand;
+      localStorage.setItem("monitor_brand", brand);
+      selectedCountry =
+        localStorage.getItem("monitor_country_" + brand) ||
+        (brand === "apple" ? localStorage.getItem("apple_country") || "US" : "US");
+      selectedCurrency = "";
+      selectedFaceValue = null;
+      const searchEl = document.getElementById("countrySearch");
+      if (searchEl) searchEl.value = "";
+      renderBrands();
+      renderCountries();
+      renderDenoms();
+      renderOffers();
+      renderSiteStatuses();
+    }
+
     function sortCountries(codes) {
       return [...codes].sort((a, b) => a.localeCompare(b));
     }
 
     function renderCountries() {
       const query = document.getElementById("countrySearch").value.trim().toLowerCase();
-      const offers = getAllOffers();
+      const offers = getBrandOffers();
       const countryMap = { ...(appData?.countries || {}) };
 
       // 若导入了新国家则补充
@@ -603,7 +704,7 @@
 
       const allCodes = sortCountries(Object.keys(counts));
       if (!counts[selectedCountry] && allCodes.length) {
-        selectedCountry = allCodes[0];
+        selectedCountry = counts["US"] ? "US" : allCodes[0];
       }
 
       const filtered = allCodes.filter((cc) => {
@@ -612,7 +713,8 @@
         return `${cc} ${m.name || ""} ${m.en || ""} ${m.currency || ""}`.toLowerCase().includes(query);
       });
 
-      document.getElementById("countrySummary").textContent = `共覆盖 ${allCodes.length} 个国家/地区`;
+      const curBrand = BRAND_META.find((b) => b.id === selectedBrand);
+      document.getElementById("countrySummary").textContent = `${curBrand?.name || ""} · 共覆盖 ${allCodes.length} 个国家/地区`;
       const grid = document.getElementById("countryGrid");
       grid.innerHTML = filtered
         .map((cc) => {
@@ -626,7 +728,9 @@
 
     function selectCountry(cc) {
       selectedCountry = cc;
-      localStorage.setItem("apple_country", cc);
+      localStorage.setItem("monitor_country_" + selectedBrand, cc);
+      if (selectedBrand === "apple") localStorage.setItem("apple_country", cc);
+      selectedCurrency = "";
       selectedFaceValue = null;
       renderCountries();
       renderDenoms();
@@ -634,7 +738,7 @@
     }
 
     function renderDenoms() {
-      const cOffers = getAllOffers().filter((o) => o.country === selectedCountry);
+      const cOffers = getBrandOffers().filter((o) => o.country === selectedCountry);
       const curList = [...new Set(cOffers.map((o) => o.currency))];
       if (!selectedCurrency || !curList.includes(selectedCurrency)) {
         selectedCurrency = curList[0] || "USD";
@@ -735,16 +839,17 @@
       const realUsd = fv / rate;
       const cnyRate = appData?.rateInfo?.rates?.CNY || 7;
       const cMeta = appData?.countries?.[selectedCountry] || { name: selectedCountry, flag: "" };
+      const curBrand = BRAND_META.find((b) => b.id === selectedBrand);
       fxBanner.innerHTML = `
         <div>
-          ${cMeta.flag || ""} <strong>${cMeta.name} ${fv} ${cur}</strong> 按国际真实汇率值：
+          ${cMeta.flag || ""} <strong>${curBrand?.name || ""} · ${cMeta.name} ${fv} ${cur}</strong> 按国际真实汇率值：
           <strong>$${realUsd.toFixed(2)} USD</strong>（≈ <strong>¥${(realUsd * cnyRate).toFixed(2)} CNY</strong>）
         </div>
         <div class="panel-sub">实时汇率: 1 USD = ${rate.toFixed(4)} ${cur}</div>
       `;
 
-      // 筛选当前国家+币种中匹配该面值的报价（精确固定面值 或 涵盖该面值的区间卡）
-      const candidates = getAllOffers().filter((o) => {
+      // 筛选当前品牌+国家+币种中匹配该面值的报价（精确固定面值 或 涵盖该面值的区间卡）
+      const candidates = getBrandOffers().filter((o) => {
         if (o.country !== selectedCountry || o.currency !== cur) return false;
         if (o.type === "fixed") return Math.abs(o.faceValue - fv) < 1e-6;
         if (o.type === "range") {
@@ -886,7 +991,10 @@
       const grid = document.getElementById("statusGrid");
       const sites = appData?.sites || {};
       const entries = Object.entries(sites);
-      document.getElementById("totalStats").textContent = `总计 ${getAllOffers().length} 条报价`;
+      const allOffers = getAllOffers();
+      const brandOffers = getBrandOffers();
+      const curBrand = BRAND_META.find((b) => b.id === selectedBrand);
+      document.getElementById("totalStats").textContent = `${curBrand?.name || ""} ${brandOffers.length} 条 · 全站总计 ${allOffers.length} 条`;
 
       const statusLabel = {
         ok: "API 直连",
@@ -901,18 +1009,22 @@
 
       grid.innerHTML = entries
         .map(([id, st]) => {
-          const ok = st.offerCount > 0;
+          const brandStat = st.byBrand?.[selectedBrand];
+          const bCountries = brandStat ? brandStat.countryCount : st.countryCount;
+          const bOffers = brandStat ? brandStat.offerCount : st.offerCount;
+          const ok = bOffers > 0;
           const staleLabel = getStaleSnapshotLabel(id, st.updatedAt);
-          const dotClass = ok ? (st.status === "stale_cache" || staleLabel ? "dot-warn" : "dot-ok") : "dot-err";
+          const dotClass = ok ? (st.status === "stale_cache" || staleLabel ? "dot-warn" : "dot-ok") : (st.offerCount > 0 ? "dot-warn" : "dot-err");
           const fiatTag = st.paymentType === "fiat" ? `<span class="badge badge-fiat" style="margin-left:4px;font-size:10px;">法币</span>` : "";
-          const staleTag = staleLabel ? `<span class="badge badge-stale" style="margin-left:4px;font-size:10px;">⚠️ 旧快照（${staleLabel}）</span>` : "";
+          const staleTag = ok && staleLabel ? `<span class="badge badge-stale" style="margin-left:4px;font-size:10px;">⚠️ 旧快照（${staleLabel}）</span>` : "";
+          const stateText = ok ? (statusLabel[st.status] || st.status) : (st.offerCount > 0 ? "本系列暂无" : (statusLabel[st.status] || st.status));
           return `
-            <div class="status-item">
+            <div class="status-item" style="${ok ? "" : "opacity:0.72;"}">
               <div class="s-top">
                 <span>${st.name || id}${fiatTag}${staleTag}</span>
-                <span><span class="dot ${dotClass}"></span> ${statusLabel[st.status] || st.status}</span>
+                <span><span class="dot ${dotClass}"></span> ${stateText}</span>
               </div>
-              <div class="panel-sub">国家: ${st.countryCount} | 规格: ${st.offerCount}</div>
+              <div class="panel-sub">国家: ${bCountries} | 规格: ${bOffers}</div>
               <div class="panel-sub">同步: ${fmtTime(st.updatedAt)}</div>
             </div>
           `;
@@ -940,6 +1052,7 @@
           return;
         }
         localStorage.setItem("apple_imported_offers", JSON.stringify(list));
+        renderBrands();
         renderCountries();
         renderDenoms();
         renderOffers();
@@ -953,6 +1066,7 @@
     function clearImported() {
       localStorage.removeItem("apple_imported_offers");
       document.getElementById("importArea").value = "";
+      renderBrands();
       renderCountries();
       renderDenoms();
       renderOffers();
@@ -1047,6 +1161,7 @@
         if (!isChanged && silent) return false;
 
         appData = nextData;
+        renderBrands();
         renderCountries();
         renderDenoms();
         renderOffers();
@@ -1180,6 +1295,7 @@
         lastCheckedAt = Date.now();
         updateMetaLine();
 
+        renderBrands();
         renderCountries();
         renderDenoms();
         renderOffers();

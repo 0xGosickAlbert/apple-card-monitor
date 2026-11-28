@@ -1,12 +1,22 @@
-import { COUNTRY_META, EXCLUDED_COUNTRIES, fetchText, isAppleBrandName, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
+import { COUNTRY_META, detectBrandSeries, fetchText, isExcludedCountry, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
 
 const SITE_ID = "eneba";
 const SITE_NAME = "Eneba";
 
+const STORE_PAGES = [
+  { brand: "apple", url: "https://www.eneba.com/store/apple-gift-cards?page=1" },
+  { brand: "apple", url: "https://www.eneba.com/store/apple-gift-cards?page=2" },
+  { brand: "playstation", url: "https://www.eneba.com/store/psn-gift-cards-united-states?page=1" },
+  { brand: "playstation", url: "https://www.eneba.com/store/psn-gift-cards-europe?page=1" },
+  { brand: "playstation", url: "https://www.eneba.com/store/psn-gift-cards-united-kingdom?page=1" },
+  { brand: "xbox", url: "https://www.eneba.com/store/xbox-gift-cards?page=1" },
+  { brand: "xbox", url: "https://www.eneba.com/store/xbox-gift-cards?page=2" },
+];
+
 function parseFaceValueAndCurrency(name, country) {
   const s = String(name || "");
   const codeMatch = s.match(
-    /([0-9]+(?:\.[0-9]+)?)\s*(USD|EUR|GBP|CAD|AUD|TRY|JPY|CHF|SEK|NOK|DKK|PLN|BRL|MXN|INR|IDR|AED|SAR|NZD|RUB|CNY)\b/i
+    /([0-9]+(?:\.[0-9]+)?)\s*(USD|EUR|GBP|CAD|AUD|TRY|JPY|CHF|SEK|NOK|DKK|PLN|BRL|MXN|INR|IDR|AED|SAR|NZD|RUB|CNY|HKD|SGD|KRW|MYR|TWD|THB|CZK|HUF|RON|ILS|PEN|CLP|COP|UAH)\b/i
   );
   if (codeMatch) {
     return { faceValue: Number(codeMatch[1]), currency: codeMatch[2].toUpperCase() };
@@ -40,22 +50,15 @@ function extractApolloState(html) {
 }
 
 /**
- * 采集 Eneba 全球 Apple / iTunes 礼品卡报价（法币平台，不含结账服务费）
+ * 采集 Eneba 全球 Apple / PlayStation / Xbox 礼品卡报价（法币平台，不含结账服务费）
  */
 export async function collectEneba(rates = {}) {
   const now = new Date().toISOString();
-  const urls = [
-    "https://www.eneba.com/store/apple-gift-cards?page=1",
-    "https://www.eneba.com/store/apple-gift-cards?page=2",
-    "https://www.eneba.com/store/apple-gift-cards?page=3",
-    "https://www.eneba.com/store/apple-gift-cards?page=4",
-  ];
-
   const deduped = new Map();
   await mapLimit(
-    urls,
+    STORE_PAGES,
     1,
-    async (pageUrl) => {
+    async ({ brand, url: pageUrl }) => {
       try {
         const html = await fetchText(pageUrl, {}, { timeoutMs: 15000 });
         const state = extractApolloState(html);
@@ -63,12 +66,12 @@ export async function collectEneba(rates = {}) {
 
         for (const [key, prod] of Object.entries(state)) {
           if (!key.startsWith("Product::") || !prod) continue;
-          if (!isAppleBrandName(prod.name)) continue;
+          if (detectBrandSeries(prod.name) !== brand) continue;
           if (!Array.isArray(prod.regions) || prod.regions.length !== 1) continue;
 
           const reg = prod.regions[0];
           const country = normalizeCountry(reg.name || String(reg.code || "").replace(/_/g, " "), prod.name);
-          if (country === "WW" || EXCLUDED_COUNTRIES.has(country)) continue;
+          if (country === "WW" || isExcludedCountry(country, brand)) continue;
 
           const parsed = parseFaceValueAndCurrency(prod.name, country);
           if (!parsed || !(parsed.faceValue > 0)) continue;
@@ -89,6 +92,7 @@ export async function collectEneba(rates = {}) {
           const offer = {
             siteId: SITE_ID,
             siteName: SITE_NAME,
+            brand,
             paymentType: "fiat",
             country,
             currency: parsed.currency,
@@ -101,11 +105,11 @@ export async function collectEneba(rates = {}) {
             unitPayUsd: null,
             inStock: Boolean(auc.isInStock ?? true),
             stockCount: null,
-            url: prod.slug ? `https://www.eneba.com/${prod.slug}` : "https://www.eneba.com/store/apple-gift-cards",
+            url: prod.slug ? `https://www.eneba.com/${prod.slug}` : pageUrl,
             updatedAt: now,
           };
 
-          const dedupKey = `${offer.country}|${offer.currency}|fixed|${offer.faceValue}`;
+          const dedupKey = `${offer.brand}|${offer.country}|${offer.currency}|fixed|${offer.faceValue}`;
           const prev = deduped.get(dedupKey);
           if (!prev || (offer.inStock && !prev.inStock) || (offer.inStock === prev.inStock && offer.payUsd < prev.payUsd)) {
             deduped.set(dedupKey, offer);
@@ -115,7 +119,7 @@ export async function collectEneba(rates = {}) {
         console.warn(`[Eneba] 页面拉取失败 (${pageUrl}): ${err.message}`);
       }
     },
-    600
+    850
   );
 
   return [...deduped.values()];

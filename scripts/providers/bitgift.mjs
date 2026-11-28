@@ -63,6 +63,7 @@ export async function collectBitGift(rates = {}) {
     offers.push({
       siteId: SITE_ID,
       siteName: SITE_NAME,
+      brand: "apple",
       paymentType: "crypto",
       country,
       currency,

@@ -1,14 +1,19 @@
-import { EXCLUDED_COUNTRIES, fetchJson, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
+import { fetchJson, isExcludedCountry, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
 
 const SITE_ID = "coingate";
 const SITE_NAME = "CoinGate";
 const API_BASE = "https://giftcards-api.coingate.com/api/v2";
 
+const BRAND_SLUGS = [
+  { slug: "apple", brand: "apple" },
+  { slug: "itunes", brand: "apple" },
+  { slug: "playstation", brand: "playstation" },
+  { slug: "xbox", brand: "xbox" },
+  { slug: "xbox-live", brand: "xbox" },
+];
+
 /**
- * 采集 CoinGate 全球各国 Apple 礼品卡报价
- * 1) 拉取 brand_group_v2/apple 获取全部支持国家
- * 2) 按国家拉取 denominations 规格列表
- * 3) 通过 details_v2 批量获取精确售价（按每批最多 40 项）
+ * 采集 CoinGate 全球各国 Apple / PlayStation / Xbox 礼品卡报价
  */
 export async function collectCoinGate(rates = {}) {
   const now = new Date().toISOString();
@@ -21,9 +26,9 @@ export async function collectCoinGate(rates = {}) {
   }
   const batchItems = [];
   const seenBatchKeys = new Set();
-  const metaMap = new Map(); // key: `${gift_card_id}|${country}|${denomVal}`
+  const metaMap = new Map(); // key: `${brand}|${gift_card_id}|${country}|${denomVal}`
 
-  for (const slug of ["apple", "itunes"]) {
+  for (const { slug, brand } of BRAND_SLUGS) {
     let baseData;
     try {
       baseData = await fetchJson(`${API_BASE}/gift-cards/brand_group_v2/${slug}?country=US`, {}, { timeoutMs: 15000 });
@@ -33,8 +38,8 @@ export async function collectCoinGate(rates = {}) {
     }
     const countries = (baseData?.countries || [])
       .map((c) => String(c.value || "").toUpperCase())
-      .filter((cc) => cc && !EXCLUDED_COUNTRIES.has(cc));
-    if (!countries.length) countries.push("US");
+      .filter((cc) => cc && !isExcludedCountry(cc, brand));
+    if (!countries.length && !isExcludedCountry("US", brand)) countries.push("US");
 
     await mapLimit(
       countries,
@@ -47,6 +52,10 @@ export async function collectCoinGate(rates = {}) {
 
           for (const d of data?.denominations || []) {
             if (!d?.gift_card_id) continue;
+            const title = `${d.title || ""} ${d.name || ""} ${d.label || ""}`;
+            if (/\b(month|months|day|days|year|years|pass|plus|gold|ultimate|ea\s*play|subscription)\b/i.test(title)) {
+              continue;
+            }
             const currency = String(d.currency || "USD").toUpperCase();
             if (d.type === "range") {
               const minFV = Number(d.min_denomination);
@@ -54,12 +63,13 @@ export async function collectCoinGate(rates = {}) {
               const step = Number(d.custom_denomination_step) || 1;
               if (!(minFV > 0) || !(maxFV >= minFV)) continue;
               const probeVal = Math.max(minFV, Math.min(maxFV, Math.ceil(minFV)));
-              const key = `${d.gift_card_id}|${cc}|${probeVal}`;
-              if (seenBatchKeys.has(key)) continue;
-              seenBatchKeys.add(key);
+              const batchKey = `${d.gift_card_id}|${cc}|${probeVal}`;
+              if (seenBatchKeys.has(batchKey)) continue;
+              seenBatchKeys.add(batchKey);
               batchItems.push({ gift_card_id: d.gift_card_id, country: cc, denomination: probeVal });
-              metaMap.set(key, {
+              metaMap.set(`${d.gift_card_id}|${cc}|${probeVal}`, {
                 slug,
+                brand,
                 type: "range",
                 country: normalizeCountry(cc),
                 rawCountry: cc,
@@ -73,12 +83,13 @@ export async function collectCoinGate(rates = {}) {
             } else {
               const fv = Number(d.denomination);
               if (!(fv > 0)) continue;
-              const key = `${d.gift_card_id}|${cc}|${fv}`;
-              if (seenBatchKeys.has(key)) continue;
-              seenBatchKeys.add(key);
+              const batchKey = `${d.gift_card_id}|${cc}|${fv}`;
+              if (seenBatchKeys.has(batchKey)) continue;
+              seenBatchKeys.add(batchKey);
               batchItems.push({ gift_card_id: d.gift_card_id, country: cc, denomination: fv });
-              metaMap.set(key, {
+              metaMap.set(`${d.gift_card_id}|${cc}|${fv}`, {
                 slug,
+                brand,
                 type: "fixed",
                 country: normalizeCountry(cc),
                 rawCountry: cc,
@@ -124,6 +135,9 @@ export async function collectCoinGate(rates = {}) {
           const key = `${gc.id}|${cc}|${denomVal}`;
           const meta = metaMap.get(key);
           if (!meta) continue;
+          if (/\b(month|months|pass|plus|gold|ultimate|ea\s*play|subscription)\b/i.test(`${gc.title || ""} ${gc.name || ""}`)) {
+            continue;
+          }
 
           const priceCur = String(gc.currency?.iso_symbol || meta.currency || "USD").toUpperCase();
           const priceAmt = Number(gc.denomination?.price);
@@ -151,6 +165,7 @@ export async function collectCoinGate(rates = {}) {
             rawOffers.push({
               siteId: SITE_ID,
               siteName: SITE_NAME,
+              brand: meta.brand,
               country: meta.country,
               currency: meta.currency,
               type: "range",
@@ -169,6 +184,7 @@ export async function collectCoinGate(rates = {}) {
             rawOffers.push({
               siteId: SITE_ID,
               siteName: SITE_NAME,
+              brand: meta.brand,
               country: meta.country,
               currency: meta.currency,
               type: "fixed",
@@ -192,10 +208,10 @@ export async function collectCoinGate(rates = {}) {
     120
   );
 
-  // 同国家同规格去重，优先保留有货且更便宜的报价
+  // 同品牌同国家同规格去重，优先保留有货且更便宜的报价
   const deduped = new Map();
   for (const o of rawOffers) {
-    const key = `${o.country}|${o.currency}|${o.type}|${o.type === "range" ? `${o.minFaceValue}-${o.maxFaceValue}` : o.faceValue}`;
+    const key = `${o.brand}|${o.country}|${o.currency}|${o.type}|${o.type === "range" ? `${o.minFaceValue}-${o.maxFaceValue}` : o.faceValue}`;
     const prev = deduped.get(key);
     if (!prev) {
       deduped.set(key, o);

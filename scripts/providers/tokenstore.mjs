@@ -1,7 +1,13 @@
-import { fetchText, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
+import { detectBrandSeries, fetchText, isExcludedCountry, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
 
 const SITE_ID = "tokenstore";
 const SITE_NAME = "Tokenstore";
+
+const BRAND_SLUGS = [
+  { slug: "apple", brand: "apple" },
+  { slug: "playstation", brand: "playstation" },
+  { slug: "xbox", brand: "xbox" },
+];
 
 const FALLBACK_PREFIXES = [
   "us/en", "gb/en", "tr/tr", "de/de", "fr/fr", "es/es", "it/it", "nl/nl",
@@ -59,26 +65,36 @@ export async function collectTokenstore() {
     // 使用内置前缀列表
   }
 
-  const productUrls = new Map(); // id -> { prefix, url, country }
+  const brandTasks = [];
+  for (const prefix of prefixes) {
+    for (const b of BRAND_SLUGS) {
+      brandTasks.push({ prefix, ...b });
+    }
+  }
+
+  const productUrls = new Map(); // id -> { brand, url, country, name }
   await mapLimit(
-    prefixes,
+    brandTasks,
     5,
-    async (prefix) => {
+    async ({ prefix, slug, brand }) => {
       try {
-        const html = await fetchText(`https://tokenstore.io/${prefix}/brands/apple`, {}, { timeoutMs: 12000 });
+        const html = await fetchText(`https://tokenstore.io/${prefix}/brands/${slug}`, {}, { timeoutMs: 12000 });
         const nd = extractNextData(html);
         const products = nd?.props?.pageProps?.products || [];
         for (const p of products) {
           if (!p?.id) continue;
+          const detected = detectBrandSeries(p.name) || (slug === "apple" ? "apple" : null);
+          if (detected !== brand) continue;
           const catSlug = p.categories?.slug || "ecommerce";
           const url = `https://tokenstore.io/${prefix}/${catSlug}/${slugifyProduct(p)}`;
           const c = normalizeCountry(p.countries?.[0] || prefix.split("/")[0], p.name);
+          if (isExcludedCountry(c, brand)) continue;
           if (!productUrls.has(p.id)) {
-            productUrls.set(p.id, { id: p.id, url, country: c, name: p.name });
+            productUrls.set(p.id, { id: p.id, brand, url, country: c, name: p.name });
           }
         }
       } catch {
-        // 个别国家未上架 Apple，忽略
+        // 个别国家未上架对应品牌，忽略
       }
     },
     100
@@ -96,6 +112,7 @@ export async function collectTokenstore() {
         if (!data) return;
 
         const country = normalizeCountry(data.countries?.[0] || entry.country, data.name);
+        if (isExcludedCountry(country, entry.brand)) return;
         const denoms = data.denominations || [];
         for (const d of denoms) {
           if (d.status && d.status !== "active") continue;
@@ -108,6 +125,7 @@ export async function collectTokenstore() {
           offers.push({
             siteId: SITE_ID,
             siteName: SITE_NAME,
+            brand: entry.brand,
             country,
             currency: parsed.currency,
             type: "fixed",

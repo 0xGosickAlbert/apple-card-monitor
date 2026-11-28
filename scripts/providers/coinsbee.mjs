@@ -1,4 +1,4 @@
-import { EXCLUDED_COUNTRIES, fetchJson, mapLimit, normalizeCountry, roundNum, sleep } from "../utils.mjs";
+import { fetchJson, isExcludedCountry, mapLimit, normalizeCountry, roundNum, sleep } from "../utils.mjs";
 
 const SITE_ID = "coinsbee";
 const SITE_NAME = "Coinsbee";
@@ -27,60 +27,75 @@ function interpolateRatio(anchors, targetFv) {
 }
 
 /**
- * 采集 Coinsbee 全量 Apple / iTunes 礼品卡报价
- * 每国仅采集 1 个任务：优先 Apple，其次补充 Apple 未覆盖的国家（如日本、台湾）的 iTunes，外层串行防 429
+ * 采集 Coinsbee 全量 Apple / PlayStation / Xbox 礼品卡报价
+ * 外层串行防 429，每国固定面值最多采 3 个锚点以控制整体耗时
  */
 export async function collectCoinsbee() {
   const now = new Date().toISOString();
-  let appleCountries = [];
-  let itunesCountries = [];
+  const brandConfigs = [
+    { brand: "apple", primary: "Apple", fallback: "iTunes" },
+    { brand: "playstation", primary: "PlayStation", fallback: null },
+    { brand: "xbox", primary: "Xbox-Live", fallback: null },
+  ];
 
-  try {
-    const info = await fetchJson(`${API_BASE}/brands/info/Apple/en/us`, {}, { timeoutMs: 15000 });
-    appleCountries = (Array.isArray(info?.countries) ? info.countries : [])
-      .map((c) => String(c).toLowerCase())
-      .filter((cc) => cc && !EXCLUDED_COUNTRIES.has(cc.toUpperCase()));
-  } catch (err) {
-    console.warn(`[Coinsbee] Apple 国家目录拉取失败: ${err.message}`);
-  }
-
-  try {
-    const info = await fetchJson(`${API_BASE}/brands/info/iTunes/en/us`, {}, { timeoutMs: 15000 });
-    itunesCountries = (Array.isArray(info?.countries) ? info.countries : [])
-      .map((c) => String(c).toLowerCase())
-      .filter((cc) => cc && !EXCLUDED_COUNTRIES.has(cc.toUpperCase()));
-  } catch (err) {
-    console.warn(`[Coinsbee] iTunes 国家目录拉取失败: ${err.message}`);
-  }
-
-  const appleSet = new Set(appleCountries);
-  const itunesSet = new Set(itunesCountries);
   const countryTasks = [];
-  for (const cc of appleCountries) {
-    countryTasks.push({ primary: "Apple", fallback: itunesSet.has(cc) ? "iTunes" : null, ccLower: cc });
-  }
-  for (const cc of itunesCountries) {
-    if (!appleSet.has(cc)) {
-      countryTasks.push({ primary: "iTunes", fallback: null, ccLower: cc });
+  for (const cfg of brandConfigs) {
+    let primaryCountries = [];
+    let fallbackCountries = [];
+    try {
+      const info = await fetchJson(`${API_BASE}/brands/info/${encodeURIComponent(cfg.primary)}/en/us`, {}, { timeoutMs: 15000 });
+      primaryCountries = (Array.isArray(info?.countries) ? info.countries : [])
+        .map((c) => String(c).toLowerCase())
+        .filter((cc) => cc && !isExcludedCountry(cc.toUpperCase(), cfg.brand));
+    } catch (err) {
+      console.warn(`[Coinsbee] ${cfg.primary} 国家目录拉取失败: ${err.message}`);
+    }
+
+    if (cfg.fallback) {
+      try {
+        const info = await fetchJson(`${API_BASE}/brands/info/${encodeURIComponent(cfg.fallback)}/en/us`, {}, { timeoutMs: 15000 });
+        fallbackCountries = (Array.isArray(info?.countries) ? info.countries : [])
+          .map((c) => String(c).toLowerCase())
+          .filter((cc) => cc && !isExcludedCountry(cc.toUpperCase(), cfg.brand));
+      } catch (err) {
+        console.warn(`[Coinsbee] ${cfg.fallback} 国家目录拉取失败: ${err.message}`);
+      }
+    }
+
+    const pSet = new Set(primaryCountries);
+    const fSet = new Set(fallbackCountries);
+    for (const cc of primaryCountries) {
+      countryTasks.push({ brand: cfg.brand, primary: cfg.primary, fallback: fSet.has(cc) ? cfg.fallback : null, ccLower: cc });
+    }
+    for (const cc of fallbackCountries) {
+      if (!pSet.has(cc)) {
+        countryTasks.push({ brand: cfg.brand, primary: cfg.fallback, fallback: null, ccLower: cc });
+      }
     }
   }
+
+  const isNonGiftCardItem = (p) => {
+    const txt = `${p.title || ""} ${p.name || ""} ${p.description || ""}`;
+    return /\b(month|months|day|days|week|weeks|year|years|plus|now|essential|extra|deluxe|game\s*pass|gamepass|core|ultimate|ea\s*play|gold|subscription|membership)\b/i.test(txt);
+  };
 
   const rawOffers = [];
   await mapLimit(
     countryTasks,
     1,
-    async ({ primary, fallback, ccLower }) => {
+    async ({ brand, primary, fallback, ccLower }) => {
       const country = normalizeCountry(ccLower);
+      if (isExcludedCountry(country, brand)) return;
 
       try {
         let usedBrand = primary;
-        let listRes = await fetchJson(`${API_BASE}/products/list/${encodeURIComponent(primary)}/${ccLower}`, {}, { timeoutMs: 15000 });
-        let products = (listRes?.results || []).filter((p) => Number(p.active) === 1 && !p.prohibited);
+        let listRes = await fetchJson(`${API_BASE}/products/list/${encodeURIComponent(primary)}/${ccLower}`, {}, { timeoutMs: 10000, retries: 0 });
+        let products = (listRes?.results || []).filter((p) => Number(p.active) === 1 && !p.prohibited && !isNonGiftCardItem(p));
         if (!products.length && fallback) {
           usedBrand = fallback;
           await sleep(150);
-          listRes = await fetchJson(`${API_BASE}/products/list/${encodeURIComponent(fallback)}/${ccLower}`, {}, { timeoutMs: 15000 });
-          products = (listRes?.results || []).filter((p) => Number(p.active) === 1 && !p.prohibited);
+          listRes = await fetchJson(`${API_BASE}/products/list/${encodeURIComponent(fallback)}/${ccLower}`, {}, { timeoutMs: 10000, retries: 0 });
+          products = (listRes?.results || []).filter((p) => Number(p.active) === 1 && !p.prohibited && !isNonGiftCardItem(p));
         }
         if (!products.length) return;
 
@@ -96,46 +111,31 @@ export async function collectCoinsbee() {
         const anchors = [];
 
         if (fixedItems.length > 0) {
-          let queryItems;
-          if (fixedItems.length <= 5) {
-            queryItems = fixedItems;
-          } else {
-            const preferredVals = [100, 50, 1000, 3000, 10000, 25, 10, 500, 200];
-            const picked = new Map();
-            for (const target of preferredVals) {
-              if (picked.size >= 3) break;
-              const match = fixedItems.find((it) => Math.abs(Number(it.value) - target) < 1e-6);
-              if (match) picked.set(match.id, match);
-            }
-            picked.set(fixedItems[0].id, fixedItems[0]);
-            picked.set(fixedItems[fixedItems.length - 1].id, fixedItems[fixedItems.length - 1]);
-            queryItems = [...picked.values()].slice(0, 5);
+          const preferredVals = [100, 50, 1000, 25, 10];
+          let anchorItem = null;
+          for (const target of preferredVals) {
+            anchorItem = fixedItems.find((it) => Math.abs(Number(it.value) - target) < 1e-6);
+            if (anchorItem) break;
           }
-
-          await mapLimit(
-            queryItems,
-            2,
-            async (item) => {
-              const val = Number(item.value);
-              const cur = String(item.currency || "USD").toUpperCase();
-              try {
-                const pr = await fetchJson(
-                  `${API_BASE}/cart/price/${item.id}/${val}/${cur}?displayCurrency=USD`,
-                  {},
-                  { timeoutMs: 12000 }
-                );
-                const usd = Number(pr?.results?.display?.price ?? pr?.results?.supplier?.price);
-                if (usd > 0) {
-                  priceMap.set(item.id, usd);
-                  anchors.push({ fv: val, ratio: usd / val });
-                }
-              } catch {
-                // 单项失败时跳过，交由邻近锚点估算
-              }
-            },
-            180
-          );
-          anchors.sort((a, b) => a.fv - b.fv);
+          if (!anchorItem) {
+            anchorItem = fixedItems[Math.floor(fixedItems.length / 2)];
+          }
+          const val = Number(anchorItem.value);
+          const cur = String(anchorItem.currency || "USD").toUpperCase();
+          try {
+            const pr = await fetchJson(
+              `${API_BASE}/cart/price/${anchorItem.id}/${val}/${cur}?displayCurrency=USD`,
+              {},
+              { timeoutMs: 10000, retries: 0 }
+            );
+            const usd = Number(pr?.results?.display?.price ?? pr?.results?.supplier?.price);
+            if (usd > 0) {
+              priceMap.set(anchorItem.id, usd);
+              anchors.push({ fv: val, ratio: usd / val });
+            }
+          } catch {
+            // 锚点拉取失败时忽略该国固定面值
+          }
         }
 
         for (const item of fixedItems) {
@@ -148,6 +148,7 @@ export async function collectCoinsbee() {
           rawOffers.push({
             siteId: SITE_ID,
             siteName: SITE_NAME,
+            brand,
             country,
             currency,
             type: "fixed",
@@ -163,52 +164,59 @@ export async function collectCoinsbee() {
           });
         }
 
+        let rangedRatio = anchors[0]?.ratio ?? null;
         for (const item of rangedItems) {
           const minFV = Number(item.min_face_value);
           const maxFV = Number(item.max_face_value);
           const step = Number(item.increment_face_value) || 1;
           const currency = String(item.currency || "USD").toUpperCase();
-          const probeVal = minFV > 0 ? minFV : 10;
-          try {
-            const pr = await fetchJson(
-              `${API_BASE}/cart/price/${item.id}/${probeVal}/${currency}?displayCurrency=USD`,
-              {},
-              { timeoutMs: 12000 }
-            );
-            const usd = Number(pr?.results?.display?.price ?? pr?.results?.supplier?.price);
-            if (usd > 0) {
-              rawOffers.push({
-                siteId: SITE_ID,
-                siteName: SITE_NAME,
-                country,
-                currency,
-                type: "range",
-                faceValue: null,
-                minFaceValue: roundNum(minFV, 2),
-                maxFaceValue: roundNum(maxFV, 2),
-                step,
-                payUsd: null,
-                unitPayUsd: roundNum(usd / probeVal, 6),
-                inStock: Boolean(item.has_supplier ?? true),
-                url,
-                updatedAt: now,
-              });
+          if (!(rangedRatio > 0)) {
+            const probeVal = minFV > 0 ? minFV : 10;
+            try {
+              const pr = await fetchJson(
+                `${API_BASE}/cart/price/${item.id}/${probeVal}/${currency}?displayCurrency=USD`,
+                {},
+                { timeoutMs: 10000, retries: 0 }
+              );
+              const usd = Number(pr?.results?.display?.price ?? pr?.results?.supplier?.price);
+              if (usd > 0) {
+                rangedRatio = usd / probeVal;
+              }
+            } catch {
+              // 忽略单条区间报价错误
             }
-          } catch {
-            // 忽略单条区间报价错误
+          }
+          if (rangedRatio > 0) {
+            rawOffers.push({
+              siteId: SITE_ID,
+              siteName: SITE_NAME,
+              brand,
+              country,
+              currency,
+              type: "range",
+              faceValue: null,
+              minFaceValue: roundNum(minFV, 2),
+              maxFaceValue: roundNum(maxFV, 2),
+              step,
+              payUsd: null,
+              unitPayUsd: roundNum(rangedRatio, 6),
+              inStock: Boolean(item.has_supplier ?? true),
+              url,
+              updatedAt: now,
+            });
           }
         }
       } catch (err) {
         console.warn(`[Coinsbee] ${primary}/${ccLower} 拉取失败: ${err.message}`);
       }
     },
-    250
+    180
   );
 
-  // 同国家同规格去重，优先保留有货且更便宜的报价
+  // 同品牌同国家同规格去重，优先保留有货且更便宜的报价
   const deduped = new Map();
   for (const o of rawOffers) {
-    const key = `${o.country}|${o.currency}|${o.type}|${o.type === "range" ? `${o.minFaceValue}-${o.maxFaceValue}` : o.faceValue}`;
+    const key = `${o.brand}|${o.country}|${o.currency}|${o.type}|${o.type === "range" ? `${o.minFaceValue}-${o.maxFaceValue}` : o.faceValue}`;
     const prev = deduped.get(key);
     if (!prev) {
       deduped.set(key, o);

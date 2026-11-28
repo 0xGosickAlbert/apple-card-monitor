@@ -1,4 +1,4 @@
-import { fetchText, isAppleBrandName, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
+import { detectBrandSeries, fetchText, isExcludedCountry, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
 
 const SITE_ID = "bytetopup";
 const SITE_NAME = "ByteTopup";
@@ -52,21 +52,23 @@ export async function collectByteTopup(rates = {}) {
   const now = new Date().toISOString();
   const productMap = new Map();
 
-  for (const q of ["Apple", "iTunes", "App Store"]) {
+  for (const q of ["Apple", "iTunes", "App Store", "PlayStation", "Xbox"]) {
     try {
       const searchHtml = await fetchText(`${BASE_URL}/products?q=${encodeURIComponent(q)}`, {}, { timeoutMs: 15000 });
       const unescaped = searchHtml.replace(/\\"/g, '"');
-      const matches = [...unescaped.matchAll(/"id":"(\d+)","name":"([^"]*(?:Apple|iTunes|App\s*Store)[^"]*)"[^}]*?"region":"([A-Z]{2})"/gi)];
+      const matches = [...unescaped.matchAll(/"id":"(\d+)","name":"([^"]*(?:Apple|iTunes|App\s*Store|PlayStation|PSN|Xbox)[^"]*)"[^}]*?"region":"([A-Z]{2})"/gi)];
       for (const m of matches) {
-        if (!isAppleBrandName(m[2])) continue;
-        productMap.set(m[1], { id: m[1], name: m[2], region: m[3] });
+        const brandSeries = detectBrandSeries(m[2]);
+        if (!brandSeries) continue;
+        productMap.set(m[1], { id: m[1], name: m[2], region: m[3], brandSeries });
       }
       // 兜底匹配未紧邻 region 的产品 id
-      const idMatches = [...unescaped.matchAll(/"id":"(\d+)","name":"([^"]*(?:Apple|iTunes|App\s*Store)[^"]*)"/gi)];
+      const idMatches = [...unescaped.matchAll(/"id":"(\d+)","name":"([^"]*(?:Apple|iTunes|App\s*Store|PlayStation|PSN|Xbox)[^"]*)"/gi)];
       for (const m of idMatches) {
-        if (!isAppleBrandName(m[2])) continue;
+        const brandSeries = detectBrandSeries(m[2]);
+        if (!brandSeries) continue;
         if (!productMap.has(m[1])) {
-          productMap.set(m[1], { id: m[1], name: m[2], region: null });
+          productMap.set(m[1], { id: m[1], name: m[2], region: null, brandSeries });
         }
       }
     } catch (err) {
@@ -74,8 +76,14 @@ export async function collectByteTopup(rates = {}) {
     }
   }
 
-  if (!productMap.has("2245")) {
-    productMap.set("2245", { id: "2245", name: "Apple USA", region: "US" });
+  for (const fb of [
+    { id: "2245", name: "Apple USA", region: "US", brandSeries: "apple" },
+    { id: "3667", name: "Playstation USA", region: "US", brandSeries: "playstation" },
+    { id: "4410", name: "Xbox USA", region: "US", brandSeries: "xbox" },
+  ]) {
+    if (!productMap.has(fb.id)) {
+      productMap.set(fb.id, fb);
+    }
   }
 
   const offers = [];
@@ -90,6 +98,7 @@ export async function collectByteTopup(rates = {}) {
         const regionMatch = unescaped.match(/"region":"([A-Z]{2})"/);
         const fvCurMatch = unescaped.match(/"faceValueCurrency":"([A-Z]{3})"/);
         const country = normalizeCountry(prod.region || regionMatch?.[1], prod.name);
+        if (isExcludedCountry(country, prod.brandSeries)) return;
         const defaultFvCurrency = fvCurMatch?.[1] || (country === "US" ? "USD" : "USD");
 
         const skus = extractSkusFromHtml(html);
@@ -114,6 +123,7 @@ export async function collectByteTopup(rates = {}) {
             offers.push({
               siteId: SITE_ID,
               siteName: SITE_NAME,
+              brand: prod.brandSeries,
               country,
               currency: defaultFvCurrency,
               type: "range",
@@ -134,6 +144,7 @@ export async function collectByteTopup(rates = {}) {
             offers.push({
               siteId: SITE_ID,
               siteName: SITE_NAME,
+              brand: prod.brandSeries,
               country,
               currency: defaultFvCurrency,
               type: "fixed",

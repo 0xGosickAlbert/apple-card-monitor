@@ -1,10 +1,19 @@
-import { COUNTRY_META, EXCLUDED_COUNTRIES, fetchText, isAppleBrandName, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
+import { COUNTRY_META, detectBrandSeries, fetchText, isExcludedCountry, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
 
 const SITE_ID = "recharge";
 const SITE_NAME = "Recharge";
-const TARGET_COUNTRIES = [
+const BASE_COUNTRIES = [
   "ae", "at", "au", "be", "ca", "ch", "de", "dk", "es", "fi", "fr", "gb",
   "ie", "it", "jp", "nl", "no", "nz", "pl", "pt", "sa", "se", "tr", "us",
+];
+const PS_COUNTRIES = [
+  ...BASE_COUNTRIES,
+  "hk", "kr", "my", "sg", "tw", "mx", "br", "in", "id", "th",
+];
+const BRAND_PAGES = [
+  { slug: "apple", brand: "apple", countries: BASE_COUNTRIES },
+  { slug: "playstation-store", brand: "playstation", countries: PS_COUNTRIES },
+  { slug: "xbox-gift-card", brand: "xbox", countries: BASE_COUNTRIES },
 ];
 
 function collectProductsFromLdJson(node, out) {
@@ -24,19 +33,26 @@ function collectProductsFromLdJson(node, out) {
 }
 
 /**
- * 采集 Recharge.com 全球 Apple 礼品卡报价（法币平台，已含页内 Service Fee）
+ * 采集 Recharge.com 全球 Apple / PlayStation / Xbox 礼品卡报价（法币平台，已含页内 Service Fee）
  */
 export async function collectRecharge(rates = {}) {
   const now = new Date().toISOString();
-  const countries = TARGET_COUNTRIES.filter((c) => !EXCLUDED_COUNTRIES.has(c.toUpperCase()));
+  const tasks = [];
+  for (const cfg of BRAND_PAGES) {
+    for (const cc of cfg.countries) {
+      if (!isExcludedCountry(cc.toUpperCase(), cfg.brand)) {
+        tasks.push({ cc, slug: cfg.slug, brand: cfg.brand });
+      }
+    }
+  }
   const deduped = new Map();
 
   await mapLimit(
-    countries,
+    tasks,
     4,
-    async (cc) => {
+    async ({ cc, slug, brand }) => {
       const country = normalizeCountry(cc);
-      const pageUrl = `https://www.recharge.com/en/${cc}/apple`;
+      const pageUrl = `https://www.recharge.com/en/${cc}/${slug}`;
 
       try {
         const html = await fetchText(pageUrl, {}, { timeoutMs: 12000, retries: 0 });
@@ -51,7 +67,7 @@ export async function collectRecharge(rates = {}) {
         }
 
         for (const prod of products) {
-          if (!isAppleBrandName(prod.name)) continue;
+          if (detectBrandSeries(prod.name) !== brand) continue;
           const offersArr = Array.isArray(prod.offers) ? prod.offers : [prod.offers];
 
           for (const off of offersArr) {
@@ -80,7 +96,7 @@ export async function collectRecharge(rates = {}) {
 
             const fvCur = String(
               off?.priceSpecification?.priceCurrency ||
-              String(prod.name || "").match(/\b(USD|EUR|GBP|CAD|AUD|TRY|JPY|CHF|SEK|NOK|DKK|PLN|AED|SAR|NZD)\b/i)?.[1] ||
+              String(prod.name || "").match(/\b(USD|EUR|GBP|CAD|AUD|TRY|JPY|CHF|SEK|NOK|DKK|PLN|AED|SAR|NZD|HKD|KRW|MYR|SGD|TWD|MXN|BRL|INR|IDR|THB)\b/i)?.[1] ||
               COUNTRY_META[country]?.currency ||
               priceCur
             ).toUpperCase();
@@ -89,6 +105,7 @@ export async function collectRecharge(rates = {}) {
             const offer = {
               siteId: SITE_ID,
               siteName: SITE_NAME,
+              brand,
               paymentType: "fiat",
               country,
               currency: fvCur,
@@ -105,7 +122,7 @@ export async function collectRecharge(rates = {}) {
               updatedAt: now,
             };
 
-            const key = `${country}|${fvCur}|fixed|${offer.faceValue}`;
+            const key = `${brand}|${country}|${fvCur}|fixed|${offer.faceValue}`;
             const prev = deduped.get(key);
             if (!prev || (offer.inStock && !prev.inStock) || (offer.inStock === prev.inStock && offer.payUsd < prev.payUsd)) {
               deduped.set(key, offer);

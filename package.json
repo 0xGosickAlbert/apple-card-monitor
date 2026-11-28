@@ -1,7 +1,7 @@
 {
   "name": "apple-giftcard-monitor",
   "version": "1.0.0",
-  "description": "Apple 礼品卡 12 大平台全球实时比价与汇率浮动监控系统",
+  "description": "Apple / PlayStation / Xbox 礼品卡 12 大平台全球实时比价与汇率浮动监控系统",
   "type": "module",
   "private": true,
   "scripts": {

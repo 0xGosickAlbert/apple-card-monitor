@@ -1,6 +1,6 @@
-# Apple 礼品卡全球实时比价与汇率浮动监控
+# Apple / PlayStation / Xbox 礼品卡全球实时比价与汇率浮动监控
 
-聚合监控 **12 大礼品卡平台**（Tamana、CryptoRefills、Coinsbee、Tokenstore、CoinGate、ByteTopup、Bitrefill、Kryptomate、Keys4Coins、BitGift、Eneba、Recharge）的全球 Apple 系列礼品卡实时售价、区间自定义面值、真实国际汇率折扣/溢价比例，以及历史价格涨跌浮动。
+聚合监控 **12 大礼品卡平台**（Tamana、CryptoRefills、Coinsbee、Tokenstore、CoinGate、ByteTopup、Bitrefill、Kryptomate、Keys4Coins、BitGift、Eneba、Recharge）的全球 **Apple 系列、PlayStation 系列、Xbox 系列** 礼品卡实时售价、区间自定义面值、真实国际汇率折扣/溢价比例，以及历史价格涨跌浮动（其中 PlayStation 系列保留全部国家与地区，Apple / Xbox 系列继续排除 `KR / MY / HK / DM`）。
 
 ---
 

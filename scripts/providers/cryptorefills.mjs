@@ -1,4 +1,4 @@
-import { EXCLUDED_COUNTRIES, fetchJson, isAppleBrandName, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
+import { detectBrandSeries, fetchJson, isExcludedCountry, mapLimit, normalizeCountry, roundNum } from "../utils.mjs";
 
 const SITE_ID = "cryptorefills";
 const SITE_NAME = "CryptoRefills";
@@ -10,10 +10,12 @@ const TARGET_COUNTRIES = [
   "CA", "AU", "NZ", "AE", "SA", "QA", "KW", "BH", "OM", "EG", "ZA", "NG",
   "KE", "IN", "SG", "MY", "ID", "TH", "PH", "VN", "KR", "BR", "MX", "AR",
   "CL", "CO", "LU", "HU", "BG", "HR", "SK", "SI", "LT", "LV", "EE",
+  "UA", "IL", "PE", "CY", "MT", "IS", "LB", "JO", "UY", "CR", "PA", "EC",
+  "PY", "BO", "GT", "HN", "NI", "SV",
 ];
 
 /**
- * 采集 CryptoRefills 全球各国 Apple / iTunes 礼品卡报价
+ * 采集 CryptoRefills 全球各国 Apple / PlayStation / Xbox 礼品卡报价
  */
 export async function collectCryptoRefills(rates = {}) {
   const now = new Date().toISOString();
@@ -21,7 +23,7 @@ export async function collectCryptoRefills(rates = {}) {
   const seenKeys = new Set();
 
   await mapLimit(
-    TARGET_COUNTRIES.filter((cc) => !EXCLUDED_COUNTRIES.has(cc)),
+    TARGET_COUNTRIES,
     5,
     async (cc) => {
       try {
@@ -30,17 +32,18 @@ export async function collectCryptoRefills(rates = {}) {
           {},
           { timeoutMs: 12000 }
         );
-        const appleFamilies = new Set();
+        const targetFamilies = new Map();
         for (const cat of brandRes?.categories || []) {
           for (const b of cat?.brands || []) {
-            if (isAppleBrandName(b.brand) || isAppleBrandName(b.family)) {
-              if (b.family) appleFamilies.add(b.family);
+            const brandSeries = detectBrandSeries(b.brand) || detectBrandSeries(b.family);
+            if (brandSeries && b.family && !isExcludedCountry(cc, brandSeries)) {
+              targetFamilies.set(b.family, brandSeries);
             }
           }
         }
-        if (appleFamilies.size === 0) return;
+        if (targetFamilies.size === 0) return;
 
-        for (const family of appleFamilies) {
+        for (const [family, brandSeries] of targetFamilies.entries()) {
           try {
             const prodRes = await fetchJson(
               `${API_BASE}/v5/products/country/${cc}?family_name=${encodeURIComponent(family)}&coin=USDT&lang=en`,
@@ -49,6 +52,7 @@ export async function collectCryptoRefills(rates = {}) {
             );
             for (const group of Array.isArray(prodRes) ? prodRes : []) {
               const country = normalizeCountry(group.country_code || cc);
+              if (isExcludedCountry(country, brandSeries)) continue;
               const groupOut = Boolean(group.is_out_of_stock);
               const slug = String(family).toLowerCase().replace(/[^a-z0-9]+/g, "-");
               const url = `https://www.cryptorefills.com/en/${slug}-crypto`;
@@ -86,13 +90,14 @@ export async function collectCryptoRefills(rates = {}) {
                   }
                   if (!(unitPayUsd > 0)) continue;
 
-                  const key = `${country}|${fvCur}|range|${minFV}-${maxFV}`;
+                  const key = `${brandSeries}|${country}|${fvCur}|range|${minFV}-${maxFV}`;
                   if (seenKeys.has(key)) continue;
                   seenKeys.add(key);
 
                   offers.push({
                     siteId: SITE_ID,
                     siteName: SITE_NAME,
+                    brand: brandSeries,
                     country,
                     currency: fvCur,
                     type: "range",
@@ -111,13 +116,14 @@ export async function collectCryptoRefills(rates = {}) {
                   const coinAmt = Number(p.coin_amount ?? p.original_coin_amount);
                   if (!(fv > 0) || !(coinAmt > 0)) continue;
 
-                  const key = `${country}|${fvCur}|fixed|${fv}`;
+                  const key = `${brandSeries}|${country}|${fvCur}|fixed|${fv}`;
                   if (seenKeys.has(key)) continue;
                   seenKeys.add(key);
 
                   offers.push({
                     siteId: SITE_ID,
                     siteName: SITE_NAME,
+                    brand: brandSeries,
                     country,
                     currency: fvCur,
                     type: "fixed",
