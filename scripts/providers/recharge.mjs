@@ -6,14 +6,14 @@ const BASE_COUNTRIES = [
   "ae", "at", "au", "be", "ca", "ch", "de", "dk", "es", "fi", "fr", "gb",
   "ie", "it", "jp", "nl", "no", "nz", "pl", "pt", "sa", "se", "tr", "us",
 ];
-const PS_COUNTRIES = [
+const EXTENDED_COUNTRIES = [
   ...BASE_COUNTRIES,
   "hk", "kr", "my", "sg", "tw", "mx", "br", "in", "id", "th",
 ];
 const BRAND_PAGES = [
   { slug: "apple", brand: "apple", countries: BASE_COUNTRIES },
-  { slug: "playstation-store", brand: "playstation", countries: PS_COUNTRIES },
-  { slug: "xbox-gift-card", brand: "xbox", countries: BASE_COUNTRIES },
+  { slug: "playstation-store", brand: "playstation", countries: EXTENDED_COUNTRIES },
+  { slug: "xbox-gift-card", brand: "xbox", countries: EXTENDED_COUNTRIES },
 ];
 
 function collectProductsFromLdJson(node, out) {

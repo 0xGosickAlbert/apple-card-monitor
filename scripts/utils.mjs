@@ -371,13 +371,18 @@ export const BRAND_SERIES = [
 ];
 
 export const EXCLUDED_COUNTRIES = new Set(["KR", "MY", "HK", "DM"]);
+export const EXCLUDED_COUNTRIES_BY_BRAND = {
+  apple: new Set(["KR", "MY", "HK", "DM", "NA", "ZA"]),
+  playstation: new Set(["TW"]),
+  xbox: new Set(["DM", "MH", "TL", "ZW", "WW"]),
+};
 
 /**
- * 判断该国家在指定品牌系列下是否需要排除（PlayStation 保留全部国家）
+ * 判断该国家在指定品牌系列下是否需要排除
  */
 export function isExcludedCountry(country, brand = "apple") {
-  if (brand === "playstation") return false;
-  return EXCLUDED_COUNTRIES.has(country);
+  const set = EXCLUDED_COUNTRIES_BY_BRAND[brand] || EXCLUDED_COUNTRIES;
+  return set.has(country);
 }
 
 /**
